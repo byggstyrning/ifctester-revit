@@ -1,0 +1,15 @@
+﻿<RevitAddIns>
+    <AddIn Type="Application">
+        <Name>IfcTesterRevit</Name>
+        <Assembly>IfcTesterRevit\IfcTesterRevit.dll</Assembly>
+        <AddInId>3EEEF746-55D7-4E99-B04A-15A9ED3AE4F4</AddInId>
+        <FullClassName>IfcTesterRevit.Application</FullClassName>
+        <VendorId>Byggstyrning</VendorId>
+        <VendorDescription>Byggstyrning - IfcTester Revit Plugin</VendorDescription>
+        <VendorEmail></VendorEmail>
+    </AddIn>
+    <ManifestSettings>
+        <UseRevitContext>False</UseRevitContext>
+        <ContextName>IfcTesterRevit</ContextName>
+    </ManifestSettings>
+</RevitAddIns>

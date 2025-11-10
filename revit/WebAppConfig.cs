@@ -1,11 +1,13 @@
 using System;
 using System.IO;
 
-namespace WebAecRevit;
+namespace IfcTesterRevit;
 
 /// <summary>
 /// Configuration for web application URL
 /// Supports both development and production modes
+/// Company: Byggstyrning
+/// Author: Jonatan Jacobsson
 /// </summary>
 public static class WebAppConfig
 {
@@ -30,22 +32,6 @@ public static class WebAppConfig
             }
         }
         
-        // Fallback: check deployment directory
-        var deployDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-            "Autodesk",
-            "Revit",
-            "Addins",
-            "2025",
-            "WebAecRevit",
-            "web"
-        );
-        
-        if (Directory.Exists(deployDir))
-        {
-            return deployDir;
-        }
-        
         return null;
     }
     
@@ -66,7 +52,7 @@ public static class WebAppConfig
         // Check for config file
         var configPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "WebAecRevit",
+            "IfcTesterRevit",
             "webapp.config"
         );
         

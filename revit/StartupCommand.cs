@@ -2,7 +2,7 @@
 using Autodesk.Revit.UI;
 using Nice3point.Revit.Toolkit.External;
 
-namespace WebAecRevit;
+namespace IfcTesterRevit;
 
 /// <summary>
 ///     External command entry point
@@ -13,7 +13,7 @@ public class StartupCommand : ExternalCommand
 {
     public override void Execute()
     {
-        var panel = UiApplication.GetDockablePane(new DockablePaneId(WebAecRevit.Application.DockablePaneId));
+        var panel = UiApplication.GetDockablePane(new DockablePaneId(IfcTesterRevit.Application.DockablePaneId));
 
         if (panel is not null)
         {

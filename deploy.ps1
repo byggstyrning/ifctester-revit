@@ -1,4 +1,4 @@
-# Build and Deploy Script for Web AEC Revit Plugin
+# Build and Deploy Script for IfcTester Revit Plugin
 # This script builds both the web app and Revit plugin, then deploys them together
 
 param(
@@ -9,7 +9,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 Write-Host "========================================" -ForegroundColor Cyan
-Write-Host "Web AEC - Build and Deploy Script" -ForegroundColor Cyan
+Write-Host "IfcTester Revit - Build and Deploy Script" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
@@ -21,7 +21,7 @@ $RevitDir = Join-Path $RootDir "revit"
 $WebDistDir = Join-Path $WebDir "dist"
 $RevitBinDir = Join-Path $RevitDir "bin\$Configuration"
 $RevitPublishDir = Join-Path $RevitBinDir "publish"
-$DeployDir = "$env:APPDATA\Autodesk\Revit\Addins\2025\WebAecRevit"
+$DeployDir = "$env:APPDATA\Autodesk\Revit\Addins\2025\IfcTesterRevit"
 $BuiltDir = Join-Path $RevitDir "built"
 
 # Step 0: Download Python packages for Pyodide
@@ -100,7 +100,7 @@ Write-Host "[2/6] Building Revit plugin..." -ForegroundColor Yellow
 Push-Location $RevitDir
 
 Write-Host "  Running dotnet build..." -ForegroundColor Gray
-dotnet build "WebAecRevit.csproj" -c $Configuration --no-incremental
+dotnet build "IfcTesterRevit.csproj" -c $Configuration --no-incremental
 if ($LASTEXITCODE -ne 0) {
     Write-Host "ERROR: Revit plugin build failed" -ForegroundColor Red
     Pop-Location
@@ -118,7 +118,7 @@ Write-Host "[3/6] Copying web app to plugin directory..." -ForegroundColor Yello
 # Find the actual publish directory (it may have a different name based on configuration)
 $PublishAddinDir = Get-ChildItem -Path $RevitPublishDir -Directory -Filter "*addin" | Select-Object -First 1
 if ($PublishAddinDir) {
-    $PluginWebDir = Join-Path $PublishAddinDir.FullName "WebAecRevit\web"
+    $PluginWebDir = Join-Path $PublishAddinDir.FullName "IfcTesterRevit\web"
     if (Test-Path $PluginWebDir) {
         Remove-Item $PluginWebDir -Recurse -Force
     }
@@ -165,7 +165,7 @@ if (Test-Path $BuiltDir) {
 New-Item -ItemType Directory -Path $BuiltDir -Force | Out-Null
 
 # Copy plugin files
-$BuiltPluginDir = Join-Path $BuiltDir "WebAecRevit"
+$BuiltPluginDir = Join-Path $BuiltDir "IfcTesterRevit"
 if ($PublishAddinDir) {
     Write-Host "  Copying plugin files from $($PublishAddinDir.FullName)..." -ForegroundColor Gray
     Copy-Item -Path "$($PublishAddinDir.FullName)\*" -Destination $BuiltPluginDir -Recurse -Force

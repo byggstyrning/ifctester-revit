@@ -11,7 +11,7 @@ using Autodesk.Revit.Attributes;
 using Autodesk.Revit.DB;
 using Autodesk.Revit.UI;
 
-namespace WebAecRevit;
+namespace IfcTesterRevit;
 
 /// <summary>
 /// Helper class for IFC export configuration operations
@@ -546,7 +546,7 @@ public class ExportIfcEventHandler : IExternalEventHandler
         try
         {
             // Create temporary file path - ALWAYS set this first
-            var tempDir = Path.Combine(Path.GetTempPath(), "WebAecRevit");
+            var tempDir = Path.Combine(Path.GetTempPath(), "IfcTesterRevit");
             Directory.CreateDirectory(tempDir);
             
             var uidoc = app.ActiveUIDocument;
@@ -981,6 +981,8 @@ public class RevitApiServer : IDisposable
     private GetIfcConfigurationsEventHandler? _eventHandlerGetIfcConfigs;
     private ExternalEvent? _externalEventExportIfc;
     private ExportIfcEventHandler? _eventHandlerExportIfc;
+    private bool _configsLoaded = false;
+    private readonly object _configsLock = new object();
 
     public RevitApiServer(int port = 48881)
     {
@@ -1147,10 +1149,65 @@ public class RevitApiServer : IDisposable
 
     private async Task HandleStatus(HttpListenerResponse response)
     {
+        // Preload IFC configurations to ensure they're ready when status returns OK
+        bool configsReady = false;
+        
+        lock (_configsLock)
+        {
+            // If configs are already loaded, return immediately
+            if (_configsLoaded)
+            {
+                configsReady = true;
+            }
+        }
+        
+        // If not loaded yet, try to load them
+        if (!configsReady && _uiApplication != null && _externalEventGetIfcConfigs != null && _eventHandlerGetIfcConfigs != null)
+        {
+            try
+            {
+                // Try to load configurations
+                var tcs = new TaskCompletionSource<bool>();
+                _eventHandlerGetIfcConfigs.CompletionSource = tcs;
+                _eventHandlerGetIfcConfigs.Configurations.Clear();
+                _externalEventGetIfcConfigs.Raise();
+
+                var completed = await Task.WhenAny(tcs.Task, Task.Delay(5000)); // 5 second timeout
+                
+                if (completed == tcs.Task && await tcs.Task)
+                {
+                    var configs = _eventHandlerGetIfcConfigs.Configurations;
+                    configsReady = configs.Count > 0;
+                    
+                    lock (_configsLock)
+                    {
+                        _configsLoaded = configsReady;
+                    }
+                    
+                    System.Diagnostics.Debug.WriteLine($"Status check: Configs loaded successfully ({configs.Count} configurations)");
+                }
+                else
+                {
+                    System.Diagnostics.Debug.WriteLine("Status check: Config loading timed out or failed");
+                }
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Status check: Exception loading configs: {ex.Message}");
+            }
+        }
+        else if (!configsReady)
+        {
+            // If handlers aren't ready yet, wait a bit
+            await Task.Delay(500);
+            configsReady = false; // Return initializing status
+        }
+
         var status = new
         {
-            status = "ok",
+            status = configsReady ? "ok" : "initializing",
             connected = true,
+            configsReady = configsReady,
             version = "1.0.0"
         };
 

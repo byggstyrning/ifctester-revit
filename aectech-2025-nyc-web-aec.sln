@@ -3,11 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebAecRevit", "revit\WebAecRevit.csproj", "{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebAecRhino", "rhino\WebAecRhino.csproj", "{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}"
-EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebAecCommon", "common\WebAecCommon.csproj", "{9F75937E-726B-42E9-BD3C-09199C4E5E46}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "IfcTesterRevit", "revit\IfcTesterRevit.csproj", "{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -31,28 +27,6 @@ Global
 		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|x64.Build.0 = Debug R25|Any CPU
 		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|x86.ActiveCfg = Debug R25|Any CPU
 		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|x86.Build.0 = Debug R25|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|x64.Build.0 = Debug|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|x86.Build.0 = Debug|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|Any CPU.Build.0 = Release|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|x64.ActiveCfg = Release|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|x64.Build.0 = Release|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|x86.ActiveCfg = Release|Any CPU
-		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|x86.Build.0 = Release|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Debug|x64.Build.0 = Debug|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Debug|x86.Build.0 = Debug|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Release|Any CPU.Build.0 = Release|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Release|x64.ActiveCfg = Release|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Release|x64.Build.0 = Release|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Release|x86.ActiveCfg = Release|Any CPU
-		{9F75937E-726B-42E9-BD3C-09199C4E5E46}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

@@ -1,16 +1,13 @@
-# Web AEC - Unified Project
+# IfcTester Revit - Unified Project
 
-This repository combines the Web AEC Revit plugin with the IfcTester Next web application, providing a complete solution for IDS (Information Delivery Specification) authoring and auditing within Revit.
+This repository combines the IfcTester Revit plugin with the IfcTester Next web application, providing a complete solution for IDS (Information Delivery Specification) authoring and auditing within Revit.
 
 ## Project Structure
 
 ```
-temp-web-aec/
+ifctester-revit/
 ├── revit/          # Revit plugin (C#/.NET)
-├── rhino/          # Rhino plugin (C#/.NET)
-├── common/         # Shared C# library
 ├── web/            # IfcTester Next web application (Svelte/Vite)
-└── frontend/       # Original React frontend (workshop example)
 ```
 
 ## Features
@@ -34,11 +31,11 @@ temp-web-aec/
 
 ```powershell
 cd revit
-dotnet build WebAecRevit.csproj -c "Debug R25"
+dotnet build IfcTesterRevit.csproj -c "Debug R25"
 ```
 
 The plugin will be automatically deployed to:
-`%APPDATA%\Autodesk\Revit\Addins\2025\WebAecRevit\`
+`%APPDATA%\Autodesk\Revit\Addins\2025\IfcTesterRevit\`
 
 ### 2. Start the Web Application
 
@@ -56,11 +53,11 @@ The plugin automatically detects the web app URL. By default, it uses:
 - **Development**: `http://localhost:5173/` (when running `npm run dev`)
 - **Production**: Can be configured via:
   - Environment variable: `WEB_APP_URL`
-  - Config file: `%LOCALAPPDATA%\WebAecRevit\webapp.config`
+  - Config file: `%LOCALAPPDATA%\IfcTesterRevit\webapp.config`
 
 To set a custom URL, create the config file:
 ```powershell
-$configPath = "$env:LOCALAPPDATA\WebAecRevit\webapp.config"
+$configPath = "$env:LOCALAPPDATA\IfcTesterRevit\webapp.config"
 New-Item -ItemType Directory -Force -Path (Split-Path $configPath)
 Set-Content -Path $configPath -Value "http://your-server:5173/"
 ```
@@ -68,7 +65,7 @@ Set-Content -Path $configPath -Value "http://your-server:5173/"
 ### 4. Launch Revit
 
 1. Open Revit 2025
-2. Click the "Execute" button in the WebAecRevit ribbon panel
+2. Click the "Execute" button in the IfcTesterRevit ribbon panel
 3. The dockable pane will open showing the web application
 
 ## Development
@@ -77,7 +74,7 @@ Set-Content -Path $configPath -Value "http://your-server:5173/"
 
 The Revit plugin consists of:
 - **Application.cs**: Entry point, creates ribbon and dockable pane
-- **WebAecRevitView.cs**: WPF UserControl hosting WebView2
+- **IfcTesterRevitView.cs**: WPF UserControl hosting WebView2
 - **RevitApiServer.cs**: HTTP server for web app communication
 - **WebAppConfig.cs**: Configuration for web app URL
 
@@ -133,7 +130,7 @@ This creates a `dist/` folder with static assets.
 
 ```powershell
 cd revit
-dotnet build WebAecRevit.csproj -c "Release R25"
+dotnet build IfcTesterRevit.csproj -c "Release R25"
 ```
 
 The deployment script automatically copies the `dist/` folder to the plugin directory, so the plugin can serve the web app locally using WebView2's virtual host mapping.
@@ -144,7 +141,7 @@ The deployment script automatically copies the `dist/` folder to the plugin dire
 
 The plugin determines the web app URL in this order:
 1. Environment variable `WEB_APP_URL`
-2. Config file at `%LOCALAPPDATA%\WebAecRevit\webapp.config`
+2. Config file at `%LOCALAPPDATA%\IfcTesterRevit\webapp.config`
 3. Build configuration (Debug = localhost:5173, Release = configurable)
 
 ### API Server Port

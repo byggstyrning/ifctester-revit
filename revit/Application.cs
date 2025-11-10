@@ -1,9 +1,9 @@
 ﻿using Autodesk.Revit.UI;
 using Nice3point.Revit.Toolkit.Decorators;
 using Nice3point.Revit.Toolkit.External;
-using WebAecRevit.Views;
+using IfcTesterRevit.Views;
 
-namespace WebAecRevit;
+namespace IfcTesterRevit;
 
 /// <summary>
 ///     Application entry point
@@ -33,11 +33,11 @@ public class Application : ExternalApplication
 
     private void CreateRibbon()
     {
-        var panel = Application.CreatePanel("Commands", "WebAecRevit");
+        var panel = Application.CreatePanel("Audit", "IfcTester");
 
-        panel.AddPushButton<StartupCommand>("Execute")
-            .SetImage("/WebAecRevit;component/Resources/Icons/RibbonIcon16.png")
-            .SetLargeImage("/WebAecRevit;component/Resources/Icons/RibbonIcon32.png");
+        panel.AddPushButton<StartupCommand>("IfcTester")
+            .SetImage("/IfcTesterRevit;component/Resources/Icons/IfcTester16.png")
+            .SetLargeImage("/IfcTesterRevit;component/Resources/Icons/IfcTester32.png");
     }
 
     private void CreateDockablePane()
@@ -46,10 +46,10 @@ public class Application : ExternalApplication
             {
                 // Register the dockable pane
                 DockablePaneProvider
-                    .Register(Context.UiControlledApplication, DockablePaneId, "WebAecRevit")
+                    .Register(Context.UiControlledApplication, DockablePaneId, "IfcTester")
                     .SetConfiguration((data) =>
                     {
-                        data.FrameworkElement = new WebAecRevitView();
+                        data.FrameworkElement = new IfcTesterRevitView();
                         data.InitialState = new DockablePaneState
                         {
                             DockPosition = DockPosition.Right,

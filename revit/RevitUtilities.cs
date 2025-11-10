@@ -1,6 +1,6 @@
 using System;
 
-namespace WebAecRevit;
+namespace IfcTesterRevit;
 
 public class RevitUtilities
 {

@@ -2,14 +2,14 @@
 
 ## Completed Tasks
 
-✅ **Moved ifctester-next into temp-web-aec**
-   - Copied all files from `C:\code\ifctester-next` to `C:\code\temp-web-aec\web\`
+✅ **Moved ifctester-next into ifctester-revit**
+   - Copied all files from `C:\code\ifctester-next` to `C:\code\ifctester-revit\web\`
    - Preserved all source files, configuration, and documentation
 
 ✅ **Updated Revit Plugin Configuration**
    - Created `WebAppConfig.cs` for configurable web app URL
    - Supports environment variables, config file, and build-time defaults
-   - Updated `WebAecRevitView.cs` to use the new configuration system
+   - Updated `IfcTesterRevitView.cs` to use the new configuration system
    - Defaults to `http://localhost:5173/` in Debug mode
 
 ✅ **Created Unified Documentation**
@@ -23,22 +23,19 @@
 ## Project Structure
 
 ```
-temp-web-aec/
+ifctester-revit/
 ├── revit/              # Revit plugin (C#)
-│   ├── WebAecRevit.csproj
+│   ├── IfcTesterRevit.csproj
 │   ├── Application.cs
-│   ├── WebAecRevitView.cs
+│   ├── IfcTesterRevitView.cs
 │   ├── RevitApiServer.cs
-│   └── WebAppConfig.cs  # NEW: Configuration system
-├── web/                 # NEW: IfcTester Next (Svelte)
+│   └── WebAppConfig.cs  # Configuration system
+├── web/                 # IfcTester Next (Svelte)
 │   ├── package.json
 │   ├── vite.config.js
 │   └── src/
-├── rhino/              # Rhino plugin (C#)
-├── common/             # Shared C# library
-├── frontend/           # Original React frontend
-├── .gitignore          # NEW: Unified gitignore
-└── README.md           # UPDATED: Comprehensive documentation
+├── .gitignore          # Unified gitignore
+└── README.md           # Comprehensive documentation
 ```
 
 ## Configuration Options
@@ -46,7 +43,7 @@ temp-web-aec/
 The Revit plugin now supports multiple ways to configure the web app URL:
 
 1. **Environment Variable**: `WEB_APP_URL`
-2. **Config File**: `%LOCALAPPDATA%\WebAecRevit\webapp.config`
+2. **Config File**: `%LOCALAPPDATA%\IfcTesterRevit\webapp.config`
 3. **Build Configuration**: Debug uses `http://localhost:5173/`, Release is configurable
 
 ## Next Steps
