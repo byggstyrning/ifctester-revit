@@ -54,14 +54,14 @@ Why it fits our scenario:
 
 _Estimated time: 30 minutes_
 
-- [] Run the frontend web app
-  ```
+- [ ] Run the frontend web app
+  ```powershell
   cd frontend
   npm install
   npm run dev
   ```
-- [] Run C# projects (Revit/Rhino)
-- [] Initialize WebView2 pointing to local development
+- [ ] Run C# projects (Revit/Rhino)
+- [ ] Initialize WebView2 pointing to local development
 
 By the end we should see our webapplication inside Revit or Rhino.
 
@@ -71,13 +71,13 @@ _Estimated time: 25 min_
 
 ### Host
 
-- [] Select objects
-- [] Extract properties
-- [] Send data to WebView2
+- [ ] Select objects
+- [ ] Extract properties
+- [ ] Send data to WebView2
 
 ### UI
 
-- [] Render properties inside Web UI
+- [ ] Render properties inside Web UI
 
 Selecting something in the model should update the UI.
 
