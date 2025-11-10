@@ -87,4 +87,13 @@ _Estimated time: 25 min_
 
 Let's implement a button that triggers a command in the host application. The command must edit data.
 
-# 5. Let's build a visualization tool
+_BREAK 10 min_
+
+# 5. Let's build a data visualization panel
+
+_Estimated time: 45 min_
+
+- [ ] Extract data from the host application
+- [ ] Send data to WebView2
+- [ ] Render data visualization using charting library
+- [ ] Add interactivity that triggers host commands
