@@ -61,6 +61,9 @@
 
         <!-- MVVM -->
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
+        
+        <!-- WebView2 -->
+        <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2908.49" />
     </ItemGroup>
     
     <ItemGroup>

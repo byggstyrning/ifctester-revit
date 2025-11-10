@@ -1,99 +1,182 @@
-Welcome to the Web AEC Tech Workshop! This repository contains code samples and exercises to help you get started building web-powered plugins for architecture, engineering, and construction (AEC) applications like Rhino and Revit using WebView2.
+# Web AEC - Unified Project
 
-Make sure to check out the [PREREQUISITES.md](PREREQUISITES.md) file to set up your development environment before diving into the exercises.
+This repository combines the Web AEC Revit plugin with the IfcTester Next web application, providing a complete solution for IDS (Information Delivery Specification) authoring and auditing within Revit.
 
-# 1. Intro to WebView2 in AEC Plugins
+## Project Structure
 
-_Estimated time: 20 minutes_
+```
+temp-web-aec/
+├── revit/          # Revit plugin (C#/.NET)
+├── rhino/          # Rhino plugin (C#/.NET)
+├── common/         # Shared C# library
+├── web/            # IfcTester Next web application (Svelte/Vite)
+└── frontend/       # Original React frontend (workshop example)
+```
 
-WebView2 is the bridge that lets us ship web-grade user experiences inside desktop design tools that architects and engineers already rely on. By embedding a Chromium-based surface inside Revit and Rhino, we can reuse our React component library, move faster on UI iteration, and keep feature parity across desktop and browser workflows.
+## Features
 
-## What is WebView2?
+- **Revit Integration**: Dockable pane in Revit with WebView2 hosting the web application
+- **IDS Authoring**: Create and edit IDS documents with a modern web interface
+- **IFC Validation**: Validate IFC models against IDS specifications using WebAssembly/Pyodide
+- **Element Selection**: Select elements in Revit by IfcGUID from validation results
+- **HTTP API Server**: Local server (port 48881) for communication between Revit and web app
 
-WebView2 is a Microsoft Edge (Chromium) control that hosts HTML, CSS, and JavaScript inside Windows applications. It supports .NET Framework, .NET 6+, Win32, and WinUI hosts, giving plugin developers an evergreen browser engine with familiar tooling.
+## Prerequisites
 
-Why it fits our scenario:
+- .NET SDK (8.0+ for Revit 2025, .NET Framework 4.8 for older versions)
+- Node.js 18+ and npm
+- Revit 2021-2026 (depending on configuration)
+- WebView2 Runtime (usually installed with Windows)
 
-- We can load any SPA that Vite produces, including the shared frontend in this repository.
-- Evergreen runtime updates independently from our add-ins, keeping the browser engine secure and modern.
-- The API surface (`CoreWebView2`) exposes navigation events, scripting, and message passing so native code stays in sync with the web layer.
-- Edge DevTools attach directly to the embedded view, which simplifies debugging complex UI flows without leaving the host application.
+## Quick Start
 
-## Why modern plugins want web user interfaces?
+### 1. Build the Revit Plugin
 
-- **Shared design system**: Designers and front-end engineers can iterate once and deploy to web, Rhino, and Revit without rewriting controls for WinForms or WPF.
-- **Faster iteration**: Hot module reload from Vite lets us see UI changes instantly while the plugin runs, cutting feedback cycles down to seconds.
-- **Richer interactions**: Browser technologies (WebGL, Canvas, WebAssembly) unlock visualizations and geometry inspectors that are time-consuming to build natively.
-- **Easier distribution**: Shipping static assets with the plugin keeps deployment lightweight while still enabling runtime feature flags or remote content when needed.
-- **Future portability**: Investing in web tech now sets us up to target additional hosts (Blender, standalone Electron, MAUI) with minimal refactoring.
+```powershell
+cd revit
+dotnet build WebAecRevit.csproj -c "Debug R25"
+```
 
-## How do we implement web views into Rhino and Revit?
+The plugin will be automatically deployed to:
+`%APPDATA%\Autodesk\Revit\Addins\2025\WebAecRevit\`
 
-### Rhino
+### 2. Start the Web Application
 
-1. Instantiate a hosting window (`WebAecRhinoView.cs`) that embeds a `WebView2` control using Rhino 8's .NET 7 support.
-2. During development, point the control to the Vite dev server so UI changes appear immediately.
-3. For packaged builds, bundle the compiled `frontend/dist` assets under `EmbeddedResources` and serve them from disk to keep the plugin offline-friendly.
-4. Use commands defined in `WebAecRhinoCommand.cs` to open the view and register handlers that react to messages from the web layer (e.g., geometry selection requests).
+```powershell
+cd web
+npm install
+npm run dev
+```
 
-### Revit
+The web app will start on `http://localhost:5173/`
 
-1. Launch a WPF window (`WebAecRevitView.cs`) from `StartupCommand.cs`, adding a `WebView2` element to host our React app.
-2. Verify that the Evergreen WebView2 Runtime is installed; if not, prompt the user before continuing since Revit cannot bootstrap it automatically.
-3. Map a virtual host (`app.localhost`) to the add-in's asset folder with `SetVirtualHostNameToFolderMapping` so the SPA loads from clean URLs without hitting the filesystem directly.
-4. Keep long-running Revit operations on the native side while streaming progress updates to the web UI to avoid blocking the main thread.
+### 3. Configure the Plugin (Optional)
 
-## How do we communicate between our host and webview applications?
+The plugin automatically detects the web app URL. By default, it uses:
+- **Development**: `http://localhost:5173/` (when running `npm run dev`)
+- **Production**: Can be configured via:
+  - Environment variable: `WEB_APP_URL`
+  - Config file: `%LOCALAPPDATA%\WebAecRevit\webapp.config`
 
-- **Native to web**: Call `CoreWebView2.PostWebMessageAsJson` or `ExecuteScriptAsync` to send payloads (selected element IDs, geometry summaries) into the React app.
-- **Web to native**: From JavaScript, use `window.chrome.webview.postMessage` to publish JSON messages. The host listens to `WebMessageReceived` and routes commands to Revit or Rhino services.
-- **Shared contracts**: Define DTOs/interfaces that live alongside both the React code and the .NET projects so both sides compile against the same schema.
-- **Diagnostics**: Mirror important events to the browser console and native logs; attach Edge DevTools for live inspection during workshop exercises.
+To set a custom URL, create the config file:
+```powershell
+$configPath = "$env:LOCALAPPDATA\WebAecRevit\webapp.config"
+New-Item -ItemType Directory -Force -Path (Split-Path $configPath)
+Set-Content -Path $configPath -Value "http://your-server:5173/"
+```
 
-# 2. Building a Hello WebView2 panel
+### 4. Launch Revit
 
-_Estimated time: 30 minutes_
+1. Open Revit 2025
+2. Click the "Execute" button in the WebAecRevit ribbon panel
+3. The dockable pane will open showing the web application
 
-- [ ] Run the frontend web app
-  ```powershell
-  cd frontend
-  npm install
-  npm run dev
-  ```
-- [ ] Run C# projects (Revit/Rhino)
-- [ ] Initialize WebView2 pointing to local development
+## Development
 
-By the end we should see our webapplication inside Revit or Rhino.
+### Revit Plugin
 
-# 3. Host → UI Messaging
+The Revit plugin consists of:
+- **Application.cs**: Entry point, creates ribbon and dockable pane
+- **WebAecRevitView.cs**: WPF UserControl hosting WebView2
+- **RevitApiServer.cs**: HTTP server for web app communication
+- **WebAppConfig.cs**: Configuration for web app URL
 
-_Estimated time: 25 min_
+### Web Application
 
-### Host
+The web application (`web/`) is a Svelte-based IDS authoring tool:
+- **src/modules/api/revit.svelte.js**: Revit integration module
+- **src/pages/Home/IdsViewer.svelte**: Main IDS viewer/editor
+- Uses Vite for development and building
 
-- [ ] Select objects
-- [ ] Extract properties
-- [ ] Send data to WebView2
+### API Communication
 
-### UI
+The Revit plugin exposes a local HTTP API on port 48881:
 
-- [ ] Render properties inside Web UI
+- `GET /status` - Check server status
+- `GET /select-by-guid/<guid>` - Select element in Revit by IfcGUID
 
-Selecting something in the model should update the UI.
+The web app automatically receives the API URL via JavaScript injection.
 
-# 4. UI → Host Messaging
+## Building for Production
 
-_Estimated time: 25 min_
+### Using the Deployment Script
 
-Let's implement a button that triggers a command in the host application. The command must edit data.
+The easiest way to build for production:
 
-_BREAK 10 min_
+```powershell
+.\deploy.ps1 -Configuration "Release R25"
+```
 
-# 5. Let's build a data visualization panel
+This script:
+1. Downloads required Python packages (ifctester wheel) for Pyodide
+2. Builds the web application
+3. Builds the Revit plugin
+4. Copies the web app to the plugin directory
+5. Deploys everything to Revit's Addins folder
 
-_Estimated time: 45 min_
+The web app is embedded in the plugin and served locally via WebView2's virtual host mapping (no external server needed).
 
-- [ ] Extract data from the host application
-- [ ] Send data to WebView2
-- [ ] Render data visualization using charting library
-- [ ] Add interactivity that triggers host commands
+**Note**: Make sure Revit is closed before running the deployment script, as it needs to overwrite files in the Addins directory.
+
+### Manual Production Build
+
+#### Web Application
+
+```powershell
+cd web
+npm run build
+```
+
+This creates a `dist/` folder with static assets.
+
+#### Revit Plugin
+
+```powershell
+cd revit
+dotnet build WebAecRevit.csproj -c "Release R25"
+```
+
+The deployment script automatically copies the `dist/` folder to the plugin directory, so the plugin can serve the web app locally using WebView2's virtual host mapping.
+
+## Configuration
+
+### Web App URL
+
+The plugin determines the web app URL in this order:
+1. Environment variable `WEB_APP_URL`
+2. Config file at `%LOCALAPPDATA%\WebAecRevit\webapp.config`
+3. Build configuration (Debug = localhost:5173, Release = configurable)
+
+### API Server Port
+
+The Revit API server port can be changed via:
+- Environment variable `REVIT_API_URL` (full URL including port)
+- Default: `http://localhost:48881`
+
+## Troubleshooting
+
+### Web app doesn't load
+
+1. Ensure the dev server is running (`npm run dev` in `web/` directory)
+2. Check that port 5173 is accessible
+3. Verify the URL in `WebAppConfig.cs` matches your dev server
+
+### Element selection doesn't work
+
+1. Ensure the Revit API server is running (starts automatically with plugin)
+2. Check that elements have IfcGUID parameters set
+3. Verify the web app is connected (check connection status in UI)
+
+### Port conflicts
+
+If port 48881 is already in use:
+1. Stop the conflicting process
+2. Or change the port in `RevitApiServer.cs` and update `WebAppConfig.GetApiUrl()`
+
+## License
+
+[Add your license here]
+
+## Contributing
+
+[Add contribution guidelines here]
