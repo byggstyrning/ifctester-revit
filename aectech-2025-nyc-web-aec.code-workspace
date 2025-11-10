@@ -1,0 +1,23 @@
+{
+	"folders": [
+		{
+			"name": "🌐 frontend",
+			"path": "frontend"
+		},
+		{
+			"name": "🦏 rhino",
+			"path": "rhino"
+		},
+		{
+			"name": "🏗️ revit",
+			"path": "revit"
+		},
+		{
+			"name": "🪴 root",
+			"path": "."
+		}
+	],
+	"settings": {
+		"editor.formatOnSave": true,
+	}
+}

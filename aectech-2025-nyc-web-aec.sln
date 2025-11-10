@@ -1,0 +1,56 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "revit", "revit", "{D64246B1-3E22-9D95-23C6-14262B074D58}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebAecRevit", "revit\WebAecRevit.csproj", "{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "rhino", "rhino", "{EBCF1AC9-7D46-B77C-1586-E77CCA2814EE}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "WebAecRhino", "rhino\WebAecRhino.csproj", "{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Debug|x64 = Debug|x64
+		Debug|x86 = Debug|x86
+		Release|Any CPU = Release|Any CPU
+		Release|x64 = Release|x64
+		Release|x86 = Release|x86
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Debug|Any CPU.ActiveCfg = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Debug|Any CPU.Build.0 = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Debug|x64.ActiveCfg = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Debug|x64.Build.0 = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Debug|x86.ActiveCfg = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Debug|x86.Build.0 = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|Any CPU.ActiveCfg = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|Any CPU.Build.0 = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|x64.ActiveCfg = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|x64.Build.0 = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|x86.ActiveCfg = Debug R25|Any CPU
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36}.Release|x86.Build.0 = Debug R25|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|x64.Build.0 = Debug|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Debug|x86.Build.0 = Debug|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|x64.ActiveCfg = Release|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|x64.Build.0 = Release|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|x86.ActiveCfg = Release|Any CPU
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28}.Release|x86.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{E6B48A54-6533-4103-8AB5-3BD4C49D0A36} = {D64246B1-3E22-9D95-23C6-14262B074D58}
+		{8A6AD8C3-62A8-4A79-BE4C-EBAB2B8BED28} = {EBCF1AC9-7D46-B77C-1586-E77CCA2814EE}
+	EndGlobalSection
+EndGlobal

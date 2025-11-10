@@ -1,0 +1,15 @@
+﻿<RevitAddIns>
+    <AddIn Type="Application">
+        <Name>WebAecRevit</Name>
+        <Assembly>WebAecRevit\WebAecRevit.dll</Assembly>
+        <AddInId>B78A34ED-FD97-4EFE-8B45-6B61D8D3B99D</AddInId>
+        <FullClassName>WebAecRevit.Application</FullClassName>
+        <VendorId>Development</VendorId>
+        <VendorDescription></VendorDescription>
+        <VendorEmail></VendorEmail>
+    </AddIn>
+    <ManifestSettings>
+        <UseRevitContext>False</UseRevitContext>
+        <ContextName>WebAecRevit</ContextName>
+    </ManifestSettings>
+</RevitAddIns>

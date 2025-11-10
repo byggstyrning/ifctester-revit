@@ -1,0 +1,42 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Revit 2025",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build",
+      "program": "",
+      "windows": {
+        "program": "C:\\Program Files\\Autodesk\\Revit 2025\\Revit.exe",
+        "targetArchitecture": "x86_64",
+        "args": [
+          "/netcore"
+        ]
+      },
+      "cwd": "${workspaceFolder}",
+      "stopAtEntry": false,
+      "console": "internalConsole"
+    },
+    // {
+    //   "name": "Rhino 8 Windows - netfx",
+    //   "type": "clr",
+    //   "request": "launch",
+    //   "preLaunchTask": "build",
+    //   "windows": {
+    //     "program": "C:\\Program Files\\Rhino 8\\System\\Rhino.exe",
+    //     "targetArchitecture": "x86_64",
+    //     "args": [
+    //       "/netfx"
+    //     ]
+    //   },
+    //   "env": {
+    //     "RHINO_PACKAGE_DIRS": "${workspaceFolder}/bin/Debug"
+    //   },
+    //   "cwd": "${workspaceFolder}",
+    //   "stopAtEntry": false,
+    //   "console": "internalConsole"
+    // },
+  ],
+  "compounds": []
+}
