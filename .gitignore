@@ -1,9 +1,11 @@
 # Build outputs
 **/bin/
 **/obj/
-**/dist/
 **/dist-ssr/
 **/publish/
+**/revit/built/
+*.dll
+*.pdb
 
 # Node modules
 **/node_modules/
@@ -44,4 +46,8 @@ Thumbs.db
 web/.claude/
 web/experiment/
 
-
+# Installer
+installer/certificate/*.pfx
+installer/certificate/*.cer
+installer/staging/
+installer/generated/

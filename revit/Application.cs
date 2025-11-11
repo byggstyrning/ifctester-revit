@@ -1,4 +1,5 @@
-﻿using Autodesk.Revit.UI;
+﻿using System.Linq;
+using Autodesk.Revit.UI;
 using Nice3point.Revit.Toolkit.Decorators;
 using Nice3point.Revit.Toolkit.External;
 using IfcTesterRevit.Views;
@@ -33,11 +34,46 @@ public class Application : ExternalApplication
 
     private void CreateRibbon()
     {
-        var panel = Application.CreatePanel("Audit", "IfcTester");
+        // Use Tab enum instead of string - Tab.AddIns is the correct way
+        RibbonPanel? existingPanel = null;
+        
+        try
+        {
+            var panels = Context.UiControlledApplication.GetRibbonPanels(Tab.AddIns);
+            existingPanel = panels.FirstOrDefault(p => p.Name == "Audit");
+        }
+        catch
+        {
+            // Panel doesn't exist yet, will create it
+        }
+        
+        RibbonPanel panel;
+        if (existingPanel != null)
+        {
+            panel = existingPanel;
+        }
+        else
+        {
+            // Create new "Audit" panel in Add-ins tab using Tab enum
+            panel = Context.UiControlledApplication.CreateRibbonPanel(Tab.AddIns, "Audit");
+        }
 
-        panel.AddPushButton<StartupCommand>("IfcTester")
-            .SetImage("/IfcTesterRevit;component/Resources/Icons/IfcTester16.png")
-            .SetLargeImage("/IfcTesterRevit;component/Resources/Icons/IfcTester32.png");
+        // Add the button to the panel
+        var pushButtonData = new PushButtonData(
+            "IfcTester",
+            "IfcTester",
+            System.Reflection.Assembly.GetExecutingAssembly().Location,
+            typeof(StartupCommand).FullName
+        );
+
+        pushButtonData.Image = new System.Windows.Media.Imaging.BitmapImage(
+            new Uri("pack://application:,,,/IfcTesterRevit;component/Resources/Icons/IfcTester16.png")
+        );
+        pushButtonData.LargeImage = new System.Windows.Media.Imaging.BitmapImage(
+            new Uri("pack://application:,,,/IfcTesterRevit;component/Resources/Icons/IfcTester32.png")
+        );
+
+        panel.AddItem(pushButtonData);
     }
 
     private void CreateDockablePane()

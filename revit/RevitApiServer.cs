@@ -1161,39 +1161,70 @@ public class RevitApiServer : IDisposable
             }
         }
         
-        // If not loaded yet, try to load them
+        // If not loaded yet, try to load them with retry logic
         if (!configsReady && _uiApplication != null && _externalEventGetIfcConfigs != null && _eventHandlerGetIfcConfigs != null)
         {
-            try
+            int maxRetries = 3;
+            int retryDelay = 1000; // Start with 1 second delay
+            
+            for (int retry = 0; retry < maxRetries && !configsReady; retry++)
             {
-                // Try to load configurations
-                var tcs = new TaskCompletionSource<bool>();
-                _eventHandlerGetIfcConfigs.CompletionSource = tcs;
-                _eventHandlerGetIfcConfigs.Configurations.Clear();
-                _externalEventGetIfcConfigs.Raise();
+                try
+                {
+                    // Try to load configurations
+                    var tcs = new TaskCompletionSource<bool>();
+                    _eventHandlerGetIfcConfigs.CompletionSource = tcs;
+                    _eventHandlerGetIfcConfigs.Configurations.Clear();
+                    _externalEventGetIfcConfigs.Raise();
 
-                var completed = await Task.WhenAny(tcs.Task, Task.Delay(5000)); // 5 second timeout
-                
-                if (completed == tcs.Task && await tcs.Task)
-                {
-                    var configs = _eventHandlerGetIfcConfigs.Configurations;
-                    configsReady = configs.Count > 0;
+                    // Use longer timeout for first attempt (IFC assemblies may need to load)
+                    int timeout = retry == 0 ? 10000 : 5000; // 10 seconds for first attempt, 5 for retries
+                    var completed = await Task.WhenAny(tcs.Task, Task.Delay(timeout));
                     
-                    lock (_configsLock)
+                    if (completed == tcs.Task && await tcs.Task)
                     {
-                        _configsLoaded = configsReady;
+                        var configs = _eventHandlerGetIfcConfigs.Configurations;
+                        configsReady = configs.Count > 0;
+                        
+                        if (configsReady)
+                        {
+                            lock (_configsLock)
+                            {
+                                _configsLoaded = true;
+                            }
+                            
+                            System.Diagnostics.Debug.WriteLine($"Status check: Configs loaded successfully ({configs.Count} configurations) after {retry + 1} attempt(s)");
+                            break;
+                        }
                     }
-                    
-                    System.Diagnostics.Debug.WriteLine($"Status check: Configs loaded successfully ({configs.Count} configurations)");
+                    else
+                    {
+                        System.Diagnostics.Debug.WriteLine($"Status check: Config loading attempt {retry + 1} timed out (timeout: {timeout}ms)");
+                        
+                        // Wait before retry (exponential backoff)
+                        if (retry < maxRetries - 1)
+                        {
+                            await Task.Delay(retryDelay);
+                            retryDelay *= 2; // Exponential backoff
+                        }
+                    }
                 }
-                else
+                catch (Exception ex)
                 {
-                    System.Diagnostics.Debug.WriteLine("Status check: Config loading timed out or failed");
+                    System.Diagnostics.Debug.WriteLine($"Status check: Exception loading configs (attempt {retry + 1}): {ex.Message}");
+                    
+                    // Wait before retry
+                    if (retry < maxRetries - 1)
+                    {
+                        await Task.Delay(retryDelay);
+                        retryDelay *= 2;
+                    }
                 }
             }
-            catch (Exception ex)
+            
+            if (!configsReady)
             {
-                System.Diagnostics.Debug.WriteLine($"Status check: Exception loading configs: {ex.Message}");
+                System.Diagnostics.Debug.WriteLine("Status check: All config loading attempts failed or timed out");
             }
         }
         else if (!configsReady)

@@ -9,7 +9,7 @@
         "build",
         "-clp:NoSummary",
         "-c:Revit R25",
-        "${workspaceFolder}/WebAecRevit.csproj"
+        "${workspaceFolder}/IfcTesterRevit.csproj"
       ],
       "problemMatcher": "$msCompile",
       "presentation": {
@@ -26,7 +26,7 @@
         "build",
         "-c:Release",
         "-clp:NoSummary",
-        "${workspaceFolder}/WebAecRevit.csproj"
+        "${workspaceFolder}/IfcTesterRevit.csproj"
       ],
       "problemMatcher": "$msCompile",
       "presentation": {
