@@ -1,6 +1,8 @@
-# IfcTester Revit
+# IfcTester for Revit
 
 A Revit plugin that integrates the IfcTester web application, providing a complete solution for IDS (Information Delivery Specification) authoring and auditing within Autodesk Revit.
+
+<img width="1920" height="920" alt="image" src="https://github.com/user-attachments/assets/90ba3e0b-4f1c-47da-af93-05f7b3c476c9" />
 
 ## Overview
 
