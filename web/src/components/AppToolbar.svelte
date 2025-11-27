@@ -6,6 +6,7 @@
     import { ChevronRightIcon, LinkIcon, XIcon } from "@lucide/svelte";
     import { Bonsai, connect, disconnect, runAudit as runBonsaiAudit } from "$src/modules/api/bonsai.svelte.js";
     import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportIfc } from "$src/modules/api/revit.svelte.js";
+    import { Archicad, connect as connectArchicad, disconnect as disconnectArchicad, refreshSelection as refreshArchicadSelection, runAudit as runArchicadAudit } from "$src/modules/api/archicad.svelte.js";
     import { onMount } from 'svelte';
     
     let isAuditing = $state(false);
@@ -196,6 +197,35 @@
             isAuditing = false;
         }
     };
+
+    const handleArchicadConnectToggle = async () => {
+        if (!Archicad.enabled) {
+            error('This workspace must be opened inside Archicad to enable the bridge.');
+            return;
+        }
+        if (Archicad.connected) {
+            disconnectArchicad();
+        } else {
+            await connectArchicad();
+        }
+    };
+
+    const handleArchicadRefresh = async () => {
+        await refreshArchicadSelection();
+    };
+
+    const handleArchicadAudit = async () => {
+        try {
+            isAuditing = true;
+            await runArchicadAudit();
+            success('Audit completed successfully');
+        } catch (err) {
+            console.error("Archicad audit failed: ", err);
+            error(`Audit failed: check console for details`);
+        } finally {
+            isAuditing = false;
+        }
+    };
     
     onMount(async () => {
         if (Bonsai.enabled) {
@@ -204,6 +234,9 @@
         } else if (Revit.enabled) {
             activeTab = 'revit';
             await connectRevit();
+        } else if (Archicad.enabled) {
+            activeTab = 'archicad';
+            await connectArchicad();
         }
     });
 </script>
@@ -262,6 +295,19 @@
                     <p>Revit Integration</p>
                 </Tooltip.Content>
             </Tooltip.Root>
+            <Tooltip.Root disableHoverableContent="true">
+                <Tooltip.Trigger>
+                    <button class="tb-btn {activeTab === 'archicad' ? 'active' : ''}" onclick={() => activeTab = 'archicad'} aria-label="Archicad Integration">
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M12 3L4 21h4l1.7-4.2h4.6L16 21h4L12 3z" />
+                            <path d="M9.5 14.5L12 8l2.5 6.5h-5z" fill="currentColor" />
+                        </svg>
+                    </button>
+                </Tooltip.Trigger>
+                <Tooltip.Content side="right">
+                    <p>Archicad Integration</p>
+                </Tooltip.Content>
+            </Tooltip.Root>
         </Tooltip.Provider>
     </div>
     <div class="content scrollbar" style:display={isMinimized ? 'none' : 'block'}>
@@ -273,7 +319,7 @@
                     </svg>
                 </button>
             {:else}
-                <h1>{activeTab === 'home' ? 'IFC Models' : activeTab === 'bonsai' ? 'Bonsai Integration' : 'Revit Integration'}</h1>
+                <h1>{activeTab === 'home' ? 'IFC Models' : activeTab === 'bonsai' ? 'Bonsai Integration' : activeTab === 'revit' ? 'Revit Integration' : 'Archicad Integration'}</h1>
                 <button onclick={() => isMinimized = true} aria-label="Minimize Toolbar">
                     <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.99994 10 7 11.9999l1.99994 2M12 5v14M5 4h14c.5523 0 1 .44772 1 1v14c0 .5523-.4477 1-1 1H5c-.55228 0-1-.4477-1-1V5c0-.55228.44772-1 1-1Z"/>
@@ -459,6 +505,87 @@
                         </div>
                     {/if}
                 {/if}
+            {:else if activeTab === 'archicad'}
+                <div class="section">
+                    <div class="connection-status {Archicad.connected ? 'connected' : 'disconnected'}">
+                        <span class="status-indicator"></span>
+                        <div>
+                            <p>{Archicad.connected ? 'Archicad bridge ready' : 'Waiting for Archicad palette'}</p>
+                            {#if Archicad.metadata?.webAppUrl}
+                                <span class="status-details">{Archicad.metadata.webAppUrl}</span>
+                            {/if}
+                        </div>
+                    </div>
+                    <button class="load-btn" onclick={handleArchicadConnectToggle} disabled={!Archicad.enabled || Archicad.loading}>
+                        {#if Archicad.loading}
+                            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                            </svg>
+                            Connecting...
+                        {:else if Archicad.connected}
+                            <XIcon size={18} />
+                            Disconnect
+                        {:else}
+                            <LinkIcon size={18} />
+                            Connect
+                        {/if}
+                    </button>
+                    <button class="load-btn ghost" onclick={handleArchicadRefresh} disabled={!Archicad.connected}>
+                        Refresh Selection
+                    </button>
+                </div>
+                <div class="section">
+                    <h3>Active Selection</h3>
+                    {#if Archicad.connected && Archicad.selection.length > 0}
+                        <div class="models-list">
+                            {#each Archicad.selection.slice(0, 10) as elem}
+                                <div class="model-item">
+                                    <div class="model-info">
+                                        <div class="model-name">{elem.elementId || elem.guid}</div>
+                                        <div class="model-meta">
+                                            <span class="model-size">{elem.typeName || 'Unknown type'}</span>
+                                            {#if elem.ifcGuid}
+                                                <span class="model-size">IFC: {elem.ifcGuid}</span>
+                                            {/if}
+                                        </div>
+                                    </div>
+                                </div>
+                            {/each}
+                            {#if Archicad.selection.length > 10}
+                                <div class="model-item">
+                                    <div class="model-info">
+                                        <div class="model-name">... {Archicad.selection.length - 10} more elements ...</div>
+                                    </div>
+                                </div>
+                            {/if}
+                        </div>
+                    {:else if Archicad.connected}
+                        <p class="help-text">Select elements in Archicad to sync with IfcTester.</p>
+                    {:else if !Archicad.enabled}
+                        <p class="help-text">Open the IfcTester palette inside Archicad to enable this integration.</p>
+                    {:else}
+                        <p class="help-text">Connect to Archicad to inspect selections.</p>
+                    {/if}
+                </div>
+                <div class="section">
+                    <button class="audit-btn" onclick={handleArchicadAudit} disabled={!Archicad.connected || !IDS.Module.activeDocument || isAuditing}>
+                        {#if isAuditing}
+                            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                            </svg>
+                            Running Audit...
+                        {:else}
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10"/>
+                                <polyline points="12,6 12,12 16,14"/>
+                            </svg>
+                            Run Audit
+                        {/if}
+                    </button>
+                    {#if !IDS.Module.activeDocument}
+                        <p class="help-text">Create or open an IDS document to enable auditing</p>
+                    {/if}
+                </div>
             {:else if activeTab === 'revit'}
                 {#if !Revit.enabled}
                     <div class="empty-state">

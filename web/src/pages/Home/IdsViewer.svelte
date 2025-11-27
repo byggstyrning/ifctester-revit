@@ -4,7 +4,8 @@
     import { error, success } from "$src/modules/utils/toast.svelte.js";
     import * as Tooltip from "$src/lib/components/ui/tooltip";
     import * as CopyableText from "$src/lib/components/ui/copyable-text";
-    import { Revit, selectElement } from "$src/modules/api/revit.svelte.js";
+    import { Revit, selectElement as selectRevitElement } from "$src/modules/api/revit.svelte.js";
+    import { Archicad, selectElement as selectArchicadElement } from "$src/modules/api/archicad.svelte.js";
 
     let activeDocument = $derived(IDS.Module.activeDocument ? IDS.Module.documents[IDS.Module.activeDocument] : null);
     let documentState = $derived(IDS.Module.activeDocument ? IDS.Module.states[IDS.Module.activeDocument] : null);
@@ -12,6 +13,7 @@
     let expandedSpecs = $state(new Set());
     let expandedRequirements = $state(new Set());
     let allExpanded = $state(false);
+    let hostSelectionEnabled = $derived((Revit.enabled && Revit.connected) || (Archicad.enabled && Archicad.connected));
 
     // Open Editor mode and jump to a specific specification
     function editSpecification(index) {
@@ -130,12 +132,20 @@
     async function handleSelectElement(globalId) {
         if (!globalId || globalId === '-') return;
         
+        const selectionTasks = [];
         if (Revit.enabled && Revit.connected) {
-            try {
-                await selectElement(globalId);
-            } catch (err) {
-                error(`Failed to select element: ${err.message}`);
-            }
+            selectionTasks.push(selectRevitElement(globalId));
+        }
+        if (Archicad.enabled && Archicad.connected) {
+            selectionTasks.push(selectArchicadElement(globalId));
+        }
+        if (selectionTasks.length === 0) {
+            return;
+        }
+        try {
+            await Promise.all(selectionTasks);
+        } catch (err) {
+            error(`Failed to select element: ${err.message}`);
         }
     }
 </script>
@@ -349,7 +359,7 @@
                                                                                     <table class="entity-table">
                                                                                     <thead>
                                                                                         <tr>
-                                                                                            {#if Revit.enabled && Revit.connected}
+                                                                                            {#if hostSelectionEnabled}
                                                                                                 <th>Select</th>
                                                                                             {/if}
                                                                                             <th>Class</th>
@@ -363,9 +373,9 @@
                                                                                     <tbody>
                                                                                         {#each reqAuditData.passed_entities.slice(0, 10) as entity}
                                                                                             <tr>
-                                                                                                {#if Revit.enabled && Revit.connected && entity.global_id && entity.global_id !== '-'}
+                                                                                                {#if hostSelectionEnabled && entity.global_id && entity.global_id !== '-'}
                                                                                                     <td>
-                                                                                                        <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in Revit">
+                                                                                                        <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in host application">
                                                                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                                                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                                                                                                                 <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
@@ -373,7 +383,7 @@
                                                                                                             </svg>
                                                                                                         </button>
                                                                                                     </td>
-                                                                                                {:else if Revit.enabled && Revit.connected}
+                                                                                                {:else if hostSelectionEnabled}
                                                                                                     <td>-</td>
                                                                                                 {/if}
                                                                                                 <td><CopyableText.Root value={entity.class} /></td>
@@ -386,7 +396,7 @@
                                                                                         {/each}
                                                                                         {#if reqAuditData.passed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={Revit.enabled && Revit.connected ? "7" : "6"}>... {reqAuditData.passed_entities.length - 10} more passing elements not shown ...</td>
+                                                                                                <td colspan={hostSelectionEnabled ? "7" : "6"}>... {reqAuditData.passed_entities.length - 10} more passing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>
@@ -404,7 +414,7 @@
                                                                                     <table class="entity-table">
                                                                                     <thead>
                                                                                         <tr>
-                                                                                            {#if Revit.enabled && Revit.connected}
+                                                                                            {#if hostSelectionEnabled}
                                                                                                 <th>Select</th>
                                                                                             {/if}
                                                                                             <th>Class</th>
@@ -419,9 +429,9 @@
                                                                                     <tbody>
                                                                                         {#each reqAuditData.failed_entities.slice(0, 10) as entity}
                                                                                             <tr>
-                                                                                                {#if Revit.enabled && Revit.connected && entity.global_id && entity.global_id !== '-'}
+                                                                                                {#if hostSelectionEnabled && entity.global_id && entity.global_id !== '-'}
                                                                                                     <td>
-                                                                                                        <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in Revit">
+                                                                                                        <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in host application">
                                                                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                                                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                                                                                                                 <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
@@ -429,7 +439,7 @@
                                                                                                             </svg>
                                                                                                         </button>
                                                                                                     </td>
-                                                                                                {:else if Revit.enabled && Revit.connected}
+                                                                                                {:else if hostSelectionEnabled}
                                                                                                     <td>-</td>
                                                                                                 {/if}
                                                                                                 <td><CopyableText.Root value={entity.class} /></td>
@@ -443,7 +453,7 @@
                                                                                         {/each}
                                                                                         {#if reqAuditData.failed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={Revit.enabled && Revit.connected ? "8" : "7"}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
+                                                                                                <td colspan={hostSelectionEnabled ? "8" : "7"}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>

@@ -1,0 +1,22 @@
+/* *****************************************************************************
+// Localizable resources for IfcTester Archicad add-on
+// ******************************************************************************/
+
+'STR#' 42000 "Add-on Name and Description" {
+/* [  1] */        "IfcTester for Archicad"
+/* [  2] */        "Embeds the IfcTester Next experience directly inside Archicad."
+}
+
+'STR#' 42010 "IfcTester Menu" {
+/* [   ] */        "IfcTester"
+/* [   ] */        "Palette"
+/* [  1] */            "IfcTester Palette^ES^EE^EI^ED^EW^E3^EL"
+}
+
+'GDLG'  42020    Palette | topCaption | close | grow   0   0  900  620  "IfcTester"  {
+/* [  1] */ Browser            0   0  900  620
+}
+
+'DLGH'  42020  DLG_42020_IfcTester_Palette {
+1    "IfcTester"        Browser_0
+}

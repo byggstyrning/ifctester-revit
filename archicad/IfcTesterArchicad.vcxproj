@@ -1,0 +1,129 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{A8020F54-6434-4C11-9F08-FDDB52A1344B}</ProjectGuid>
+    <Keyword>Win32Proj</Keyword>
+    <RootNamespace>IfcTesterArchicad</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <DevKitRoot>$(ARCHICAD_DEVKIT_DIR)</DevKitRoot>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(DevKitRoot)' == ''">
+    <DevKitRoot>$(SolutionDir)..\..\APIDevKit</DevKitRoot>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <PlatformToolset>v143</PlatformToolset>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <TargetExt>.apx</TargetExt>
+    <IntDir>Build\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>Build\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <TargetExt>.apx</TargetExt>
+    <IntDir>Build\$(Platform)\$(Configuration)\</IntDir>
+    <OutDir>Build\$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(DevKitRoot)\Support\Inc;$(DevKitRoot)\Support\Modules\GSRoot;$(DevKitRoot)\Support\Modules\GSRoot\STL\imp;$(DevKitRoot)\Support\Modules\DGLib;$(DevKitRoot)\Support\Modules\InputOutput;$(DevKitRoot)\Support\Modules\Graphix;$(DevKitRoot)\Support\Modules\TextEngine;Src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;_DEBUG;WINDOWS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <Optimization>Disabled</Optimization>
+      <PrecompiledHeader />
+      <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>$(DevKitRoot)\Support\Lib\Win\ACAP_STATD.lib;$(DevKitRoot)\Support\Modules\DGLib\Win\DGImp.lib;$(DevKitRoot)\Support\Modules\GSRoot\Win\GSRootImp.lib;$(DevKitRoot)\Support\Modules\ObjectDatabase\Win\ObjectDatabaseImp.lib;$(DevKitRoot)\Support\Modules\VectorImage\Win\VectorImageImp.lib;$(DevKitRoot)\Support\Modules\InputOutput\Win\InputOutputImp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)$(ProjectName).apx</OutputFile>
+      <SubSystem>NotSet</SubSystem>
+      <EntryPointSymbol>DllMainEntry</EntryPointSymbol>
+      <AdditionalOptions>/export:GetExportedFuncAddrs,%401 /export:SetImportedFuncAddrs,%402 %(AdditionalOptions)</AdditionalOptions>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+    <CustomBuildStep />
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>$(DevKitRoot)\Support\Inc;$(DevKitRoot)\Support\Modules\GSRoot;$(DevKitRoot)\Support\Modules\GSRoot\STL\imp;$(DevKitRoot)\Support\Modules\DGLib;$(DevKitRoot)\Support\Modules\InputOutput;$(DevKitRoot)\Support\Modules\Graphix;$(DevKitRoot)\Support\Modules\TextEngine;Src;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>WIN32;NDEBUG;WINDOWS;_WINDOWS;_USRDLL;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level4</WarningLevel>
+      <TreatWarningAsError>true</TreatWarningAsError>
+      <Optimization>MaxSpeed</Optimization>
+      <PrecompiledHeader />
+      <TreatWChar_tAsBuiltInType>false</TreatWChar_tAsBuiltInType>
+      <LanguageStandard>stdcpplatest</LanguageStandard>
+    </ClCompile>
+    <Link>
+      <AdditionalDependencies>$(DevKitRoot)\Support\Lib\Win\ACAP_STAT.lib;$(DevKitRoot)\Support\Modules\DGLib\Win\DGImp.lib;$(DevKitRoot)\Support\Modules\GSRoot\Win\GSRootImp.lib;$(DevKitRoot)\Support\Modules\ObjectDatabase\Win\ObjectDatabaseImp.lib;$(DevKitRoot)\Support\Modules\VectorImage\Win\VectorImageImp.lib;$(DevKitRoot)\Support\Modules\InputOutput\Win\InputOutputImp.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <OutputFile>$(OutDir)$(ProjectName).apx</OutputFile>
+      <SubSystem>NotSet</SubSystem>
+      <EntryPointSymbol>DllMainEntry</EntryPointSymbol>
+      <AdditionalOptions>/export:GetExportedFuncAddrs,%401 /export:SetImportedFuncAddrs,%402 %(AdditionalOptions)</AdditionalOptions>
+      <OptimizeReferences>true</OptimizeReferences>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <TargetMachine>MachineX64</TargetMachine>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="Src\APIEnvir.h" />
+    <ClInclude Include="Src\BrowserPalette.hpp" />
+    <ClInclude Include="Src\WebAppConfig.hpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Src\BrowserPalette.cpp" />
+    <ClCompile Include="Src\IfcTesterArchicad.cpp" />
+    <ClCompile Include="Src\WebAppConfig.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="Resources\RINT\IfcTesterArchicad.grc">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling localized resources...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">cl /nologo /X /EP /P /I \"$(DevKitRoot)\\Support\\Inc\" /I \"$(DevKitRoot)\\Support\\Modules\\DGLib\" /FI\"$(DevKitRoot)\\Support\\Inc\\utf8header.h\" /DDEBUG /DWINDOWS /Fi\"$(OutDir)RO\\IfcTesterArchicad.grc.rc2.i\" \"Resources\\RINT\\IfcTesterArchicad.grc\"&#x0D;&#x0A;\"$(DevKitRoot)\\Support\\Tools\\Win\\ResConv.exe\" -m r -D WINDOWS -T W -q utf8 1252 -i \"$(OutDir)RO\\IfcTesterArchicad.grc.rc2.i\" -D _DEBUG -o \"$(OutDir)RO\\IfcTesterArchicad.grc.rc2\" -w 2</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)RO\IfcTesterArchicad.grc.rc2;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling localized resources...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">cl /nologo /X /EP /P /I \"$(DevKitRoot)\\Support\\Inc\" /I \"$(DevKitRoot)\\Support\\Modules\\DGLib\" /FI\"$(DevKitRoot)\\Support\\Inc\\utf8header.h\" /DWINDOWS /Fi\"$(OutDir)RO\\IfcTesterArchicad.grc.rc2.i\" \"Resources\\RINT\\IfcTesterArchicad.grc\"&#x0D;&#x0A;\"$(DevKitRoot)\\Support\\Tools\\Win\\ResConv.exe\" -m r -D WINDOWS -T W -q utf8 1252 -i \"$(OutDir)RO\\IfcTesterArchicad.grc.rc2.i\" -o \"$(OutDir)RO\\IfcTesterArchicad.grc.rc2\" -w 2</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)RO\IfcTesterArchicad.grc.rc2;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="Resources\RFIX\IfcTesterArchicadFix.grc">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling non-localized resources...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">cl /nologo /X /EP /P /I \"$(DevKitRoot)\\Support\\Inc\" /I \"$(DevKitRoot)\\Support\\Modules\\DGLib\" /FI\"$(DevKitRoot)\\Support\\Inc\\utf8header.h\" /DDEBUG /DWINDOWS /Fi\"$(OutDir)RO\\IfcTesterArchicadFix.grc.rc2.i\" \"Resources\\RFIX\\IfcTesterArchicadFix.grc\"&#x0D;&#x0A;\"$(DevKitRoot)\\Support\\Tools\\Win\\ResConv.exe\" -m r -D WINDOWS -T W -q utf8 1252 -i \"$(OutDir)RO\\IfcTesterArchicadFix.grc.rc2.i\" -D _DEBUG -o \"$(OutDir)RO\\IfcTesterArchicadFix.grc.rc2\" -w 2</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)RO\IfcTesterArchicadFix.grc.rc2;%(Outputs)</Outputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling non-localized resources...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">cl /nologo /X /EP /P /I \"$(DevKitRoot)\\Support\\Inc\" /I \"$(DevKitRoot)\\Support\\Modules\\DGLib\" /FI\"$(DevKitRoot)\\Support\\Inc\\utf8header.h\" /DWINDOWS /Fi\"$(OutDir)RO\\IfcTesterArchicadFix.grc.rc2.i\" \"Resources\\RFIX\\IfcTesterArchicadFix.grc\"&#x0D;&#x0A;\"$(DevKitRoot)\\Support\\Tools\\Win\\ResConv.exe\" -m r -D WINDOWS -T W -q utf8 1252 -i \"$(OutDir)RO\\IfcTesterArchicadFix.grc.rc2.i\" -o \"$(OutDir)RO\\IfcTesterArchicadFix.grc.rc2\" -w 2</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)RO\IfcTesterArchicadFix.grc.rc2;%(Outputs)</Outputs>
+    </CustomBuild>
+    <CustomBuild Include="Resources\RFIX.win\IfcTesterArchicad.rc2">
+      <Message Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Compiling Windows RC2...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">rc /i \"$(DevKitRoot)\\Support\\Inc\" /i \"$(DevKitRoot)\\Support\\Modules\\DGLib\" /i \"$(OutDir)RO\" /d _DEBUG /fo\"$(OutDir)IfcTesterArchicad.res\" \"Resources\\RFIX.win\\IfcTesterArchicad.rc2\"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)IfcTesterArchicad.res;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(OutDir)RO\IfcTesterArchicad.grc.rc2;$(OutDir)RO\IfcTesterArchicadFix.grc.rc2;%(AdditionalInputs)</AdditionalInputs>
+      <Message Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Compiling Windows RC2...</Message>
+      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">rc /i \"$(DevKitRoot)\\Support\\Inc\" /i \"$(DevKitRoot)\\Support\\Modules\\DGLib\" /i \"$(OutDir)RO\" /fo\"$(OutDir)IfcTesterArchicad.res\" \"Resources\\RFIX.win\\IfcTesterArchicad.rc2\"</Command>
+      <Outputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)IfcTesterArchicad.res;%(Outputs)</Outputs>
+      <AdditionalInputs Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(OutDir)RO\IfcTesterArchicad.grc.rc2;$(OutDir)RO\IfcTesterArchicadFix.grc.rc2;%(AdditionalInputs)</AdditionalInputs>
+    </CustomBuild>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+</Project>

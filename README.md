@@ -42,6 +42,9 @@ This repository combines the IfcTester Revit plugin (C#/.NET) with the IfcTester
 
 ```
 ifctester-revit/
+├── archicad/          # Archicad add-on (C++/CEF palette)
+│   ├── Src/                       # Browser palette, WebAppConfig, entry points
+│   └── Resources/                 # GRC + RC2 descriptors for menus/palette
 ├── revit/              # Revit plugin (C#/.NET)
 │   ├── Application.cs              # Entry point, creates ribbon and dockable pane
 │   ├── IfcTesterRevitView.cs      # WPF UserControl hosting WebView2
@@ -133,6 +136,58 @@ Set-Content -Path $configPath -Value "http://your-server:5173/"
 2. Navigate to the **Add-ins** tab in the ribbon
 3. Click the **IfcTester** button in the **Audit** panel
 4. The dockable pane will open showing the web application
+
+## Archicad Integration (Preview)
+
+An experimental Archicad add-on lives under `archicad/`. It follows the [Graphisoft “Browser control in ARCHICAD and JavaScript connection” guide](https://archicadapi.graphisoft.com/browser-control-and-javascript-connection) to embed the IfcTester web application inside a dockable palette powered by CEF.
+
+### Requirements
+
+- Archicad 23+ with the latest **Archicad API DevKit** installed on Windows.
+- Visual Studio 2022 (v143 toolset) with the **Desktop development with C++** workload.
+- Environment variable `ARCHICAD_DEVKIT_DIR` pointing at the DevKit root (so the project can resolve `Support/` headers, libs, and ResConv).
+
+### Building the add-on
+
+1. Open `archicad/IfcTesterArchicad.sln` in Visual Studio.
+2. Restore the DevKit paths if prompted (confirm `ARCHICAD_DEVKIT_DIR`).
+3. Build `Debug|x64` to target the development profile.  
+   The build produces an `.apx` plus `IfcTesterArchicad.res` inside `archicad/Build/x64/<Config>/`.
+
+The project automatically:
+
+- Registers a modeless palette (`BrowserPalette`) with Archicad’s `DG::Palette`.
+- Compiles localized (`RINT`) and fixed (`RFIX`) GRC resources via `ResConv`.
+- Links against the DevKit static libraries (`ACAP_STAT`, `DGImp`, `GSRootImp`, etc.).
+
+### Installing
+
+1. Create a folder under `%ProgramData%\\GRAPHISOFT\\ARCHICAD <version>\\Add-Ons\\IfcTesterArchicad\\`.
+2. Copy the compiled `.apx`, `.res`, and the `WebApp` folder (see below) into that directory.
+3. Launch Archicad and enable the add-on via **Options → Add-On Manager**.
+
+### Serving the web app
+
+The palette loads the standard IfcTester UI:
+
+- **Dev mode**: when the add-on is compiled in `Debug`, it defaults to `http://localhost:5173/?host=archicad`. Run `npm run dev` inside `web/` and the palette will stream the live app.
+- **Packaged mode**: copy the built `web/dist/` into `archicad/WebApp/` next to the `.apx`. The add-on resolves `file:///.../WebApp/index.html` and injects `host=archicad` so the SPA exposes the proper bridge.
+- Override by setting `IFCTESTER_ARCHICAD_URL` before launching Archicad.
+
+### What works today
+
+- Host palette + Chromium control surfaced in Archicad.
+- JavaScript bridge (`window.ACAPI`) exposes:
+  - `GetSelectedElements` → returns `[guid, ifcGuid, typeName, elementId]`.
+  - `SelectElementByGuid` → selects/highlights Archicad elements by Archicad GUID or IFC GlobalId.
+  - `GetHostInfo`, `RefreshSelection` convenience helpers.
+- Selection synchronization: whenever the user changes the Archicad selection, the palette notifies the SPA (`window.__IfcTesterArchicad__.selectionChanged()`), which refreshes the display and enables “Select element in host application” buttons inside audit reports.
+
+### Next steps
+
+- Implement IFC export/attachment logic similar to the Revit workflow.
+- Wire up installer scripts to copy the `WebApp` bundle and register the add-on automatically.
+- Expand the JS bridge with Archicad-specific endpoints (view isolation, parameter lookups, etc.).
 
 ## Development
 

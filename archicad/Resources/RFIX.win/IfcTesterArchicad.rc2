@@ -1,0 +1,8 @@
+/* *****************************************************************************
+// Windows resource aggregator for IfcTester Archicad add-on
+// ******************************************************************************/
+
+#include "IfcTesterArchicad.grc.rc2"
+#include "IfcTesterArchicadFix.grc.rc2"
+
+// Optionally add an icon resource here when branding assets are available.
