@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<AddOn>
+    <Name>IfcTesterArchicad</Name>
+    <Version>1.0.0</Version>
+    <Vendor>Byggstyrning</Vendor>
+    <VendorDescription>Byggstyrning - IfcTester Archicad Plugin</VendorDescription>
+    <AddOnId>4EEEF746-55D7-4E99-B04A-15A9ED3AE4F5</AddOnId>
+    <Assembly>IfcTesterArchicad\IfcTesterArchicad.dll</Assembly>
+    <MainClassName>IfcTesterArchicad.Application</MainClassName>
+    <MinArchicadVersion>27</MinArchicadVersion>
+    <MaxArchicadVersion>29</MaxArchicadVersion>
+</AddOn>

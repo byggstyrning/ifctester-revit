@@ -1,0 +1,76 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <UseWPF>true</UseWPF>
+        <Nullable>enable</Nullable>
+        <LangVersion>latest</LangVersion>
+        <PlatformTarget>x64</PlatformTarget>
+        <ImplicitUsings>true</ImplicitUsings>
+        <EnableDynamicLoading>true</EnableDynamicLoading>
+        <Configurations>Debug AC27;Debug AC28;Debug AC29</Configurations>
+        <Configurations>$(Configurations);Release AC27;Release AC28;Release AC29</Configurations>
+    </PropertyGroup>
+
+    <!-- Archicad configuration -->
+    <PropertyGroup Condition="$(Configuration.Contains('AC27'))">
+        <ArchicadVersion>27</ArchicadVersion>
+        <TargetFramework>net48</TargetFramework>
+    </PropertyGroup>
+    <PropertyGroup Condition="$(Configuration.Contains('AC28'))">
+        <ArchicadVersion>28</ArchicadVersion>
+        <TargetFramework>net48</TargetFramework>
+    </PropertyGroup>
+    <PropertyGroup Condition="$(Configuration.Contains('AC29'))">
+        <ArchicadVersion>29</ArchicadVersion>
+        <TargetFramework>net8.0-windows</TargetFramework>
+    </PropertyGroup>
+
+    <!-- Build configuration -->
+    <PropertyGroup>
+        <IsRepackable>false</IsRepackable>
+    </PropertyGroup>
+
+    <!-- Assembly metadata -->
+    <PropertyGroup>
+        <AssemblyTitle>IfcTester Archicad Plugin</AssemblyTitle>
+        <AssemblyDescription>IDS authoring and auditing tool for Archicad</AssemblyDescription>
+        <Company>Byggstyrning</Company>
+        <Product>IfcTester Archicad</Product>
+        <Authors>Jonatan Jacobsson</Authors>
+        <Version>1.0.0</Version>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <!-- Archicad API References -->
+        <!-- Note: These need to be installed separately from Archicad SDK -->
+        <Reference Include="APIUtils">
+            <HintPath>C:\Program Files\GRAPHISOFT\ARCHICAD $(ArchicadVersion)\API Development Kit\Bin\APIUtils.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Geometry">
+            <HintPath>C:\Program Files\GRAPHISOFT\ARCHICAD $(ArchicadVersion)\API Development Kit\Bin\Geometry.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Archicad">
+            <HintPath>C:\Program Files\GRAPHISOFT\ARCHICAD $(ArchicadVersion)\API Development Kit\Bin\Archicad.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        <Reference Include="Interfaces">
+            <HintPath>C:\Program Files\GRAPHISOFT\ARCHICAD $(ArchicadVersion)\API Development Kit\Bin\Interfaces.dll</HintPath>
+            <Private>False</Private>
+        </Reference>
+        
+        <!-- WebView2 for browser control -->
+        <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2908.49" />
+    </ItemGroup>
+    
+    <ItemGroup>
+        <Resource Include="Resources\Icons\IfcTester16.png" />
+        <Resource Include="Resources\Icons\IfcTester32.png" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Folder Include="Models" />
+    </ItemGroup>
+
+</Project>
