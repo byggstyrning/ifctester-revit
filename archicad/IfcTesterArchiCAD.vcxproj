@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+
+  <PropertyGroup Label="Globals">
+    <ProjectGuid>{E8B9F7C6-5D4A-3B2E-1F0A-9C8D7E6F5A4B}</ProjectGuid>
+    <RootNamespace>IfcTesterArchiCAD</RootNamespace>
+    <ProjectName>IfcTesterArchiCAD</ProjectName>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+
+  <!-- ArchiCAD API DevKit Path - Adjust to your installation -->
+  <PropertyGroup Label="ArchiCADDevKit">
+    <!-- Change these paths to match your ArchiCAD API DevKit installation -->
+    <ArchiCADDevKitPath>$(ARCHICAD_API_DEVKIT)\.</ArchiCADDevKitPath>
+    <ArchiCADVersion>27</ArchiCADVersion>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>DynamicLibrary</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+  </PropertyGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+
+  <PropertyGroup>
+    <TargetExt>.apx</TargetExt>
+    <OutDir>$(ProjectDir)Build\$(Configuration)\</OutDir>
+    <IntDir>$(ProjectDir)Build\$(Configuration)\Intermediate\</IntDir>
+  </PropertyGroup>
+
+  <!-- Include directories -->
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>
+        $(ProjectDir)Src;
+        $(ArchiCADDevKitPath)\Support\Inc;
+        $(ArchiCADDevKitPath)\Support\Modules\DGLib;
+        $(ArchiCADDevKitPath)\Support\Modules\GSRoot;
+        $(ArchiCADDevKitPath)\Support\Modules\GSUtils;
+        $(ArchiCADDevKitPath)\Support\Modules\InputOutput;
+        %(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>
+        WIN32;
+        _WINDOWS;
+        _DEBUG;
+        _USRDLL;
+        UNICODE;
+        _UNICODE;
+        ACExtension;
+        %(PreprocessorDefinitions)
+      </PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDebugDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <Optimization>Disabled</Optimization>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>
+        $(ArchiCADDevKitPath)\Support\Lib\Win;
+        %(AdditionalLibraryDirectories)
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>
+        ACAP_STAT.lib;
+        DGLib.lib;
+        GSRoot.lib;
+        GSUtils.lib;
+        InputOutput.lib;
+        ws2_32.lib;
+        %(AdditionalDependencies)
+      </AdditionalDependencies>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <ModuleDefinitionFile>$(ProjectDir)IfcTesterArchiCAD.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <AdditionalIncludeDirectories>
+        $(ProjectDir)Src;
+        $(ArchiCADDevKitPath)\Support\Inc;
+        $(ArchiCADDevKitPath)\Support\Modules\DGLib;
+        $(ArchiCADDevKitPath)\Support\Modules\GSRoot;
+        $(ArchiCADDevKitPath)\Support\Modules\GSUtils;
+        $(ArchiCADDevKitPath)\Support\Modules\InputOutput;
+        %(AdditionalIncludeDirectories)
+      </AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>
+        WIN32;
+        _WINDOWS;
+        NDEBUG;
+        _USRDLL;
+        UNICODE;
+        _UNICODE;
+        ACExtension;
+        %(PreprocessorDefinitions)
+      </PreprocessorDefinitions>
+      <RuntimeLibrary>MultiThreadedDLL</RuntimeLibrary>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <AdditionalLibraryDirectories>
+        $(ArchiCADDevKitPath)\Support\Lib\Win;
+        %(AdditionalLibraryDirectories)
+      </AdditionalLibraryDirectories>
+      <AdditionalDependencies>
+        ACAP_STAT.lib;
+        DGLib.lib;
+        GSRoot.lib;
+        GSUtils.lib;
+        InputOutput.lib;
+        ws2_32.lib;
+        %(AdditionalDependencies)
+      </AdditionalDependencies>
+      <GenerateDebugInformation>true</GenerateDebugInformation>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <ModuleDefinitionFile>$(ProjectDir)IfcTesterArchiCAD.def</ModuleDefinitionFile>
+    </Link>
+  </ItemDefinitionGroup>
+
+  <!-- Source Files -->
+  <ItemGroup>
+    <ClCompile Include="Src\Main.cpp" />
+    <ClCompile Include="Src\BrowserPalette.cpp" />
+    <ClCompile Include="Src\ArchiCADApiServer.cpp" />
+  </ItemGroup>
+
+  <!-- Header Files -->
+  <ItemGroup>
+    <ClInclude Include="Src\IfcTesterArchiCAD.hpp" />
+    <ClInclude Include="Src\BrowserPalette.hpp" />
+    <ClInclude Include="Src\ArchiCADApiServer.hpp" />
+  </ItemGroup>
+
+  <!-- Resource Files -->
+  <ItemGroup>
+    <ResourceCompile Include="RFIX.win\IfcTesterArchiCAD.rc2" />
+  </ItemGroup>
+
+  <!-- GRC Resource Files -->
+  <ItemGroup>
+    <None Include="RFIX\IfcTesterArchiCADFix.grc" />
+    <None Include="RINT\IfcTesterArchiCAD.grc" />
+  </ItemGroup>
+
+  <!-- Module Definition File -->
+  <ItemGroup>
+    <None Include="IfcTesterArchiCAD.def" />
+  </ItemGroup>
+
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+
+  <!-- Pre-build: Compile GRC files using ResConv -->
+  <Target Name="CompileGRC" BeforeTargets="ClCompile">
+    <Message Text="Compiling GRC resource files..." Importance="High" />
+    <Exec Command="&quot;$(ArchiCADDevKitPath)\Support\Tools\Win\ResConv.exe&quot; -m r -T W -q utf8 -w 2 &quot;$(ProjectDir)RFIX\IfcTesterArchiCADFix.grc&quot;" 
+          ContinueOnError="true" />
+    <Exec Command="&quot;$(ArchiCADDevKitPath)\Support\Tools\Win\ResConv.exe&quot; -m r -T W -q utf8 -w 2 &quot;$(ProjectDir)RINT\IfcTesterArchiCAD.grc&quot;" 
+          ContinueOnError="true" />
+  </Target>
+
+  <!-- Post-build: Copy web app to output -->
+  <Target Name="CopyWebApp" AfterTargets="Build">
+    <Message Text="Copying web application files..." Importance="High" />
+    <ItemGroup>
+      <WebAppFiles Include="$(ProjectDir)..\web\dist\**\*.*" />
+    </ItemGroup>
+    <Copy SourceFiles="@(WebAppFiles)" 
+          DestinationFolder="$(OutDir)WebApp\%(RecursiveDir)" 
+          SkipUnchangedFiles="true"
+          ContinueOnError="true" />
+  </Target>
+
+</Project>

@@ -1,0 +1,29 @@
+/* *****************************************************************************
+// IfcTester ArchiCAD Add-On
+// Localizable resources (RINT)
+// Contains strings, menus, and dialog definitions
+// ******************************************************************************/
+
+/* Add-On Name and Description */
+'STR#' 32000 "Add-on Name and Description" {
+/* [  1] */     "IfcTester"
+/* [  2] */     "IDS authoring and auditing tool for ArchiCAD"
+}
+
+/* Menu Strings */
+'STR#' 32500 "Strings for the Menu" {
+/* [   ] */     "Audit"
+/* [   ] */     "IFC Testing"
+/* [  1] */     "IfcTester Panel^ES^EE^EI^ED^EW^E3^EL"
+}
+
+/* Dialog Definition - IfcTester Browser Palette */
+/* Palette | topCaption | close | grow - resizable dockable palette */
+'GDLG'  32500    Palette | topCaption | close | grow   0   0  450  600  "IfcTester"  {
+/* [  1] */ Browser         0   0  450  600
+}
+
+/* Dialog Help Resource */
+'DLGH'  32500  DLG_32500_IfcTester_Palette {
+1   "IfcTester Browser Control"     Browser_0
+}

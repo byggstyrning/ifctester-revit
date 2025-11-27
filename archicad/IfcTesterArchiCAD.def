@@ -1,0 +1,10 @@
+; IfcTester ArchiCAD Add-On
+; Module Definition File
+
+LIBRARY IfcTesterArchiCAD
+
+EXPORTS
+    CheckEnvironment
+    RegisterInterface
+    Initialize
+    FreeData

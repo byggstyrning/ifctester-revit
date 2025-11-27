@@ -1,0 +1,47 @@
+# Build output
+Build/
+*.apx
+
+# Compiled resources
+*.grc.rc2
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.ncb
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.opendb
+
+# Debug
+*.pdb
+*.ilk
+
+# Intermediate files
+*.obj
+*.o
+*.log
+*.tlog
+
+# IntelliSense
+ipch/
+
+# CMake
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+
+# Backup files
+*.bak
+*.backup
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+*.swp
+*.swo

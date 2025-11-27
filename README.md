@@ -1,312 +1,187 @@
-# IfcTester for Revit
+# IfcTester for BIM Applications
 
-A Revit plugin that integrates the IfcTester web application, providing a complete solution for IDS (Information Delivery Specification) authoring and auditing within Autodesk Revit.
+A suite of plugins that integrate the IfcTester web application with major BIM software, providing a complete solution for IDS (Information Delivery Specification) authoring and auditing within your design environment.
 
 [<img width="1920" height="920" alt="image" src="https://github.com/user-attachments/assets/90ba3e0b-4f1c-47da-af93-05f7b3c476c9" />](https://github.com/user-attachments/assets/1cb93a9a-b7c7-4e77-a6ff-db6ccd17be35)
 
+## Supported Platforms
+
+| Platform | Status | Documentation |
+|----------|--------|---------------|
+| **Autodesk Revit** | ✅ Ready | [Revit Plugin Guide](revit/README.md) |
+| **GRAPHISOFT ArchiCAD** | 🚧 In Development | [ArchiCAD Add-On Guide](archicad/README.md) |
+
 ## Overview
 
-This repository combines the IfcTester Revit plugin (C#/.NET) with the IfcTester Next web application (Svelte/Vite), creating a seamless integration that allows users to author and validate exported IFC files against IDS specifications directly within Revit. The web application runs in a dockable pane using WebView2, while Python-based validation runs client-side via WebAssembly/Pyodide.
+This repository combines the IfcTester web application (Svelte/Vite) with native plugins for BIM software, creating a seamless integration that allows users to author and validate exported IFC files against IDS specifications directly within their design environment. The web application runs in an embedded browser, while Python-based validation runs client-side via WebAssembly/Pyodide.
 
 ## Features
 
-- **Revit Integration**: Dockable pane in Revit with WebView2 hosting the web application
+- **BIM Software Integration**: 
+  - Dockable panels/palettes in Revit and ArchiCAD
+  - Select elements from IFC validation results
+  - Export IFC directly from the plugin
 - **IDS Authoring**: Create and edit IDS documents with a modern web interface
 - **IFC Validation**: Validate IFC models against IDS specifications using WebAssembly/Pyodide
-- **Element Selection**: Select elements in Revit by IfcGUID from validation results
-- **HTTP API Server**: Local server (port 48881) for bidirectional communication between Revit and web app
+- **HTTP API Server**: Local server for bidirectional communication
 - **Offline Support**: Python packages bundled locally for offline operation
-- **Production Ready**: Embedded web app served via WebView2 virtual host mapping
-
-## Prerequisites
-
-### Development Environment
-
-- **Windows** with Revit 2021-2026 installed (depending on configuration)
-- **.NET SDK** - [Download here](https://dotnet.microsoft.com/en-us/download)
-  - .NET SDK 8.0+ for Revit 2025
-  - .NET Framework 4.8 for older Revit versions
-- **Node.js 18+** and npm - [Download here](https://nodejs.org/en/download)
-- **WebView2 Runtime** (usually installed with Windows)
-- **Visual Studio Code** or your preferred IDE for C# and web development
-  - C# Dev Kit extension (required, for C# development)
-  - TailwindCSS extension (optional, but helpful for styling)
-  - Prettier extension (optional, for code formatting)
-
-### Knowledge Requirements
-
-- Basic knowledge of JavaScript/TypeScript and web development (HTML, CSS)
-- Familiarity with C# and .NET development
 
 ## Project Structure
 
 ```
-ifctester-revit/
-├── revit/              # Revit plugin (C#/.NET)
-│   ├── Application.cs              # Entry point, creates ribbon and dockable pane
-│   ├── IfcTesterRevitView.cs      # WPF UserControl hosting WebView2
-│   ├── RevitApiServer.cs          # HTTP server for web app communication
-│   ├── WebAppConfig.cs             # Configuration for web app URL
-│   ├── StartupCommand.cs          # Ribbon button command
-│   └── IfcTesterRevit.csproj      # Project file
-├── web/                 # IfcTester Next web application (Svelte/Vite)
+ifctester/
+├── revit/               # Revit plugin (C#/.NET)
+│   ├── Application.cs   # Entry point
+│   ├── RevitApiServer.cs # HTTP API server
+│   └── IfcTesterRevit.csproj
+├── archicad/            # ArchiCAD add-on (C++)
+│   ├── Src/
+│   │   ├── Main.cpp     # Add-on entry point
+│   │   ├── BrowserPalette.cpp # Browser control UI
+│   │   └── ArchiCADApiServer.cpp # HTTP API server
+│   ├── RFIX/            # Non-localizable resources
+│   ├── RINT/            # Localizable resources
+│   └── IfcTesterArchiCAD.vcxproj
+├── web/                 # IfcTester web application (Svelte/Vite)
 │   ├── src/
-│   │   ├── modules/
-│   │   │   ├── api/revit.svelte.js    # Revit integration module
-│   │   │   └── wasm/worker/           # WebAssembly worker for Pyodide
-│   │   └── pages/Home/IdsViewer.svelte  # Main IDS viewer/editor
-│   ├── public/
-│   │   ├── worker/bin/             # Python wheel files (ifctester, etc.)
-│   │   └── pyodide/                # Pyodide runtime
-│   ├── scripts/
-│   │   └── download-packages.ps1   # Downloads Python packages for Pyodide
-│   └── package.json
-├── scripts/
-│   └── deploy.ps1                  # Unified build and deployment script
-└── README.md                       # This file
+│   │   └── modules/api/ # BIM software integration modules
+│   └── public/worker/   # Pyodide and Python packages
+├── installer/           # Installer configurations
+│   ├── IfcTesterRevit.iss    # Revit installer
+│   └── IfcTesterArchiCAD.iss # ArchiCAD installer
+├── scripts/             # Build and deployment scripts
+│   ├── deploy.ps1       # Revit deployment
+│   └── build-archicad.ps1 # ArchiCAD build
+└── IfcTester.sln        # Combined Visual Studio solution
 ```
 
 ## Quick Start
 
-### 1. Clone and Setup
+### Revit Plugin
 
 ```powershell
-git clone <repository-url>
-cd ifctester-revit
+# Build and deploy for Revit 2025
+.\scripts\deploy.ps1 -Configuration "Release R25"
 ```
 
-### 2. Build and Deploy (Recommended)
+See [Revit Plugin Documentation](revit/README.md) for detailed instructions.
 
-The easiest way to get started is using the deployment script:
+### ArchiCAD Add-On
 
 ```powershell
-.\scripts\deploy.ps1 -Configuration "Debug R25"
+# Set ArchiCAD API DevKit path
+$env:ARCHICAD_API_DEVKIT = "C:\Program Files\GRAPHISOFT\API Development Kit 27"
+
+# Build for ArchiCAD 27
+.\scripts\build-archicad.ps1 -Configuration Release -ArchiCADVersion 27
 ```
 
-This script will:
-1. Download required Python packages (ifctester wheel) for Pyodide
-2. Build the web application
-3. Build the Revit plugin
-4. Copy the web app to the plugin directory
-5. Deploy everything to `%APPDATA%\Autodesk\Revit\Addins\2025\IfcTesterRevit\`
+See [ArchiCAD Add-On Documentation](archicad/README.md) for detailed instructions.
 
-**Note**: Make sure Revit is closed before running the deployment script.
+## Prerequisites
 
-### 3. Manual Setup (Development)
+### Common Requirements
 
-#### Build the Revit Plugin
+- **Windows 10/11** (64-bit)
+- **Node.js 18+** and npm - [Download here](https://nodejs.org/)
 
-```powershell
-cd revit
-dotnet build IfcTesterRevit.csproj -c "Debug R25"
-```
+### Revit Plugin
 
-The plugin will be automatically deployed to:
-`%APPDATA%\Autodesk\Revit\Addins\2025\IfcTesterRevit\`
+- **.NET SDK 8.0+** - [Download here](https://dotnet.microsoft.com/)
+- **Autodesk Revit 2021-2026**
+- **WebView2 Runtime** (usually pre-installed)
 
-#### Start the Web Application
+### ArchiCAD Add-On
+
+- **Visual Studio 2022** with C++ desktop development workload
+- **ArchiCAD API Development Kit** - [Download here](https://archicadapi.graphisoft.com/)
+- **GRAPHISOFT ArchiCAD 25-27**
+
+## API Communication
+
+Both plugins expose a local HTTP API for communication with the web interface:
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/status` | GET | Check server status |
+| `/select-by-guid/{guid}` | GET | Select element by IFC GUID |
+| `/ifc-configurations` | GET | List IFC export configurations |
+| `/export-ifc` | POST | Export model to IFC |
+
+**Default Ports:**
+- Revit: `48881`
+- ArchiCAD: `48882`
+
+## Building the Web Application
+
+The web application is shared between all plugins:
 
 ```powershell
 cd web
 npm install
-npm run dev
-```
-
-The web app will start on `http://localhost:5173/`
-
-### 4. Configure the Plugin (Optional)
-
-The plugin automatically detects the web app URL. By default, it uses:
-- **Development**: `http://localhost:5173/` (when running `npm run dev`)
-- **Production**: Embedded web app served locally via WebView2 virtual host mapping
-
-To set a custom URL, create a config file:
-```powershell
-$configPath = "$env:LOCALAPPDATA\IfcTesterRevit\webapp.config"
-New-Item -ItemType Directory -Force -Path (Split-Path $configPath)
-Set-Content -Path $configPath -Value "http://your-server:5173/"
-```
-
-### 5. Launch Revit
-
-1. Open Revit 2025
-2. Navigate to the **Add-ins** tab in the ribbon
-3. Click the **IfcTester** button in the **Audit** panel
-4. The dockable pane will open showing the web application
-
-## Development
-
-### Revit Plugin Architecture
-
-The Revit plugin consists of several key components:
-
-- **Application.cs**: Entry point that creates the ribbon panel and dockable pane on startup
-- **IfcTesterRevitView.cs**: WPF UserControl that hosts the WebView2 control and handles navigation
-- **RevitApiServer.cs**: HTTP server (port 48881) that exposes Revit API endpoints for the web app
-- **WebAppConfig.cs**: Configuration system that determines the web app URL from environment variables, config files, or build settings
-- **StartupCommand.cs**: External command that toggles the dockable pane visibility
-
-### Web Application Architecture
-
-The web application (`web/`) is a Svelte-based IDS authoring tool:
-
-- **src/modules/api/revit.svelte.js**: Revit integration module that communicates with the Revit API server
-- **src/pages/Home/IdsViewer.svelte**: Main IDS viewer/editor component
-- **src/modules/wasm/worker/**: WebAssembly worker that runs Pyodide for Python-based validation
-- Uses Vite for development and building
-
-### API Communication
-
-The Revit plugin exposes a local HTTP API on port 48881:
-
-- `GET /status` - Check server status
-- `GET /select-by-guid/<guid>` - Select element in Revit by IfcGUID
-
-The web app automatically receives the API URL via JavaScript injection when the WebView2 loads.
-
-### Pyodide Package Management
-
-Python packages (like `ifctester`) are downloaded during the build process and served locally:
-
-- **Download Script**: `web/scripts/download-packages.ps1` automatically fetches the latest ifctester version from PyPI
-- **Storage**: Wheel files are stored in `web/public/worker/bin/`
-- **Runtime**: The worker tries to install from local files first, falling back to PyPI if needed
-- **Benefits**: Works offline, faster initialization, more reliable
-
-The deployment script automatically downloads packages before building, ensuring all required wheels are available locally.
-
-## Building for Production
-
-### Using the Deployment Script
-
-The easiest way to build for production:
-
-```powershell
-.\scripts\deploy.ps1 -Configuration "Release R25"
-```
-
-Or skip the web build if it's already built:
-
-```powershell
-.\scripts\deploy.ps1 -Configuration "Release R25" -SkipWebBuild
-```
-
-This script:
-1. Downloads required Python packages (ifctester wheel) for Pyodide
-2. Builds the web application (unless `-SkipWebBuild` is specified)
-3. Builds the Revit plugin
-4. Copies the web app to the plugin directory
-5. Deploys everything to Revit's Addins folder
-6. Creates a `built` folder in the revit directory with all files for easy distribution
-
-The web app is embedded in the plugin and served locally via WebView2's virtual host mapping (`app.localhost`), so no external server is needed in production.
-
-### Manual Production Build
-
-#### Web Application
-
-```powershell
-cd web
 npm run build
 ```
 
-This creates a `dist/` folder with static assets, including the Python wheel files from `public/`.
+The built files in `web/dist/` are embedded in each plugin.
 
-#### Revit Plugin
+## Installers
+
+### Creating Installers
+
+1. **Revit Installer**:
+   ```powershell
+   # Requires Inno Setup
+   iscc installer\IfcTesterRevit.iss
+   ```
+
+2. **ArchiCAD Installer**:
+   ```powershell
+   # Requires Inno Setup
+   iscc installer\IfcTesterArchiCAD.iss
+   ```
+
+## Development
+
+### Web Application Development
 
 ```powershell
-cd revit
-dotnet build IfcTesterRevit.csproj -c "Release R25"
+cd web
+npm run dev
 ```
 
-The deployment script automatically copies the `dist/` folder to the plugin directory, so the plugin can serve the web app locally using WebView2's virtual host mapping.
+The dev server runs at `http://localhost:5173/`. Plugins can be configured to use this URL during development.
 
-## Configuration
+### Debugging
 
-### Web App URL
-
-The plugin determines the web app URL in this order:
-1. Environment variable `WEB_APP_URL`
-2. Config file at `%LOCALAPPDATA%\IfcTesterRevit\webapp.config`
-3. Build configuration (Debug = localhost:5173, Release = embedded via virtual host)
-
-### API Server Port
-
-The Revit API server port can be changed via:
-- Environment variable `REVIT_API_URL` (full URL including port)
-- Default: `http://localhost:48881`
-
-## Troubleshooting
-
-### Web app doesn't load
-
-1. **Development mode**: Ensure the dev server is running (`npm run dev` in `web/` directory)
-2. Check that port 5173 is accessible
-3. Verify the URL in `WebAppConfig.cs` matches your dev server
-4. **Production mode**: Check that the `web` folder exists in the plugin directory with all files
-
-### Element selection doesn't work
-
-1. Ensure the Revit API server is running (starts automatically with plugin)
-2. Check that elements have IfcGUID parameters set
-3. Verify the web app is connected (check connection status in UI)
-4. Check browser console for errors
-
-### Port conflicts
-
-If port 48881 is already in use:
-1. Stop the conflicting process
-2. Or change the port in `RevitApiServer.cs` and update `WebAppConfig.GetApiUrl()`
-
-### Python packages not loading
-
-1. Ensure `download-packages.ps1` was run during build
-2. Check that wheel files exist in `web/public/worker/bin/`
-3. Verify the config.json has the correct `ifctester_url` path
-4. Check browser console for Pyodide errors
+- **Revit**: Attach Visual Studio debugger to `Revit.exe`
+- **ArchiCAD**: Attach Visual Studio debugger to `ARCHICAD.exe`
+- **Web**: Use browser DevTools or CEF debug port (see platform-specific docs)
 
 ## Project History
 
-This project was created by merging two existing projects:
+This project combines several open-source efforts:
 
-### Source Projects
+- **IfcTester Next Web Application**: Based on [ifctester-next](https://github.com/theseyan/ifctester-next) by theseyan
+- **Revit Plugin Architecture**: Based on [aectech-2025-nyc-web-aec](https://github.com/vwnd/aectech-2025-nyc-web-aec) by vwnd
+- **ArchiCAD Integration**: Based on the [ArchiCAD Browser Control API](https://archicadapi.graphisoft.com/browser-control-and-javascript-connection)
 
-- **IfcTester Next Web Application**: The web application (`web/`) is based on [ifctester-next](https://github.com/theseyan/ifctester-next) by [theseyan](https://github.com/theseyan), which provides IDS authoring and auditing capabilities in a modern web interface.
+## Contributing
 
-- **Revit Plugin Base**: The Revit plugin architecture is based on the [aectech-2025-nyc-web-aec](https://github.com/vwnd/aectech-2025-nyc-web-aec) repository by [vwnd](https://github.com/vwnd), which demonstrates WebView2 integration patterns for Revit and Rhino plugins.
-
-### Merge Process
-
-The merge included:
-
-- ✅ Moving ifctester-next into ifctester-revit/web/
-- ✅ Adapting the Revit plugin architecture from the aectech-2025-nyc-web-aec base
-- ✅ Creating unified configuration system (`WebAppConfig.cs`)
-- ✅ Setting up Pyodide package download system for offline Python package support
-- ✅ Creating unified build and deployment script
-- ✅ Comprehensive documentation
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Test with the target BIM software
+5. Submit a pull request
 
 ## License
 
-MIT License
+MIT License - See [LICENSE](LICENSE) for details.
 
 Copyright (c) 2025 Byggstyrning
 
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
+---
 
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
+## Platform-Specific Documentation
 
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
-
+- [Revit Plugin Guide](revit/README.md) - Detailed Revit integration documentation
+- [ArchiCAD Add-On Guide](archicad/README.md) - Detailed ArchiCAD integration documentation
