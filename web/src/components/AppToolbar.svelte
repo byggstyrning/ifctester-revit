@@ -2,7 +2,7 @@
     import * as Tooltip from "$lib/components/ui/tooltip";
     import { IFCModels, loadIfc, unloadIfc, auditIfc, openIfc, createAuditReport, clearIdsAuditReports, runAudit, clearAllModels } from "$src/modules/api/api.svelte.js";
     import * as IDS from "$src/modules/api/ids.svelte.js";
-    import { error, success } from "$src/modules/utils/toast.svelte.js";
+    import { error, success, idsValidationError } from "$src/modules/utils/toast.svelte.js";
     import { ChevronRightIcon, LinkIcon, XIcon } from "@lucide/svelte";
     import { Bonsai, connect, disconnect, runAudit as runBonsaiAudit } from "$src/modules/api/bonsai.svelte.js";
     import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportIfc } from "$src/modules/api/revit.svelte.js";
@@ -66,9 +66,7 @@
             isLoadingConfigs = true;
             const configs = await getIfcConfigurations();
             ifcConfigurations = configs;
-            if (configs.length > 0 && !selectedIfcConfig) {
-                selectedIfcConfig = configs[0];
-            }
+            // Don't auto-select - let user choose
         } catch (err) {
             console.error('Failed to load IFC configurations:', err);
         } finally {
@@ -102,7 +100,12 @@
                         success('Audit completed successfully');
                     } catch (auditErr) {
                         console.error("Auto-audit failed: ", auditErr);
-                        // Don't show error toast for audit failure, just log it
+                        // Check if it's an IDS validation error - show it even for auto-audit
+                        const errorMessage = auditErr?.message || auditErr?.toString() || String(auditErr);
+                        if (errorMessage.includes('XMLSchema') || errorMessage.includes('xmlschema') || errorMessage.includes('IDS')) {
+                            idsValidationError(auditErr);
+                        }
+                        // Otherwise, don't show error toast for auto-audit failure, just log it
                     }
                 }
             }
@@ -128,7 +131,13 @@
             success('Audit completed successfully');
         } catch (err) {
             console.error("Audit failed: ", err);
-            error(`Audit failed: check console for details`);
+            // Check if it's an IDS validation error
+            const errorMessage = err?.message || err?.toString() || String(err);
+            if (errorMessage.includes('XMLSchema') || errorMessage.includes('xmlschema') || errorMessage.includes('IDS')) {
+                idsValidationError(err);
+            } else {
+                error(`Audit failed: check console for details`);
+            }
         } finally {
             isAuditing = false;
         }
@@ -191,7 +200,13 @@
             success('Audit completed successfully');
         } catch (err) {
             console.error("Audit failed: ", err);
-            error(`Audit failed: check console for details`);
+            // Check if it's an IDS validation error
+            const errorMessage = err?.message || err?.toString() || String(err);
+            if (errorMessage.includes('XMLSchema') || errorMessage.includes('xmlschema') || errorMessage.includes('IDS')) {
+                idsValidationError(err);
+            } else {
+                error(`Audit failed: check console for details`);
+            }
         } finally {
             isAuditing = false;
         }
@@ -533,6 +548,7 @@
                                             bind:value={selectedIfcConfig}
                                             disabled={isExportingIfc}
                                         >
+                                            <option value="" disabled>Select your IFC Export Configuration</option>
                                             {#each ifcConfigurations as config}
                                                 <option value={config}>{config}</option>
                                             {/each}
@@ -707,6 +723,11 @@
     .config-select option {
         background: #1f2937;
         color: #ffffffd9;
+    }
+    
+    .config-select option:disabled {
+        color: #6b7280;
+        font-style: italic;
     }
     
     .export-btn {

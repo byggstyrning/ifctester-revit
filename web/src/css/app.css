@@ -209,6 +209,13 @@ html, body {
             background-position: center;
             background-repeat: no-repeat;
         }
+
+        .notice {
+            margin-left: auto;
+            font-size: 11px;
+            color: #ffffff69;
+            font-style: italic;
+        }
     }
 
     .main-body {
@@ -842,4 +849,26 @@ html, body {
 .scrollbar::-webkit-scrollbar-thumb {
     background-color: #ffffff1c;
     border-radius: 50px;
+}
+
+/* IDS Validation Error Toast Styling */
+:global(.ids-validation-error-toast) {
+    background-color: #ff8c00 !important; /* Orange background */
+    border-color: #ff7a00 !important;
+    color: #ffffff !important;
+}
+
+:global(.ids-validation-error-toast [data-sonner-toast]) {
+    background-color: #ff8c00 !important;
+    border-color: #ff7a00 !important;
+    color: #ffffff !important;
+}
+
+:global(.ids-validation-error-toast [data-sonner-description]) {
+    color: #ffffff !important;
+    opacity: 0.95;
+}
+
+:global(.ids-validation-error-toast [data-sonner-toast] *) {
+    color: #ffffff !important;
 }
