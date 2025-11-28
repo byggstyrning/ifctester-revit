@@ -1,0 +1,5 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Revit Logo - R in a box -->
+  <rect x="3" y="3" width="18" height="18" rx="2" fill="currentColor" opacity="0.1"/>
+  <path d="M8 6h4c2.21 0 4 1.79 4 4s-1.79 4-4 4h-2v4H8V6zm2 6h2c1.1 0 2-.9 2-2s-.9-2-2-2h-2v4z" fill="currentColor"/>
+</svg>

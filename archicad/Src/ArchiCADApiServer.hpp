@@ -13,6 +13,8 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+#include <queue>
+#include <condition_variable>
 
 // Windows headers for HTTP server
 #ifdef _WIN32
@@ -22,6 +24,22 @@
 #endif
 
 namespace IfcTester {
+
+// Custom Windows message for main-thread processing
+constexpr UINT WM_IFCTESTER_PROCESS_QUEUE = WM_USER + 100;
+
+/**
+ * Selection request structure for thread-safe queue
+ */
+struct SelectionRequest {
+    GS::UniString guid;
+    bool processed;
+    bool success;
+    std::condition_variable* cv;
+    std::mutex* mtx;
+    
+    SelectionRequest() : processed(false), success(false), cv(nullptr), mtx(nullptr) {}
+};
 
 /**
  * HTTP Response structure
@@ -90,6 +108,27 @@ public:
      * Get the server port
      */
     int GetPort() const { return port; }
+    
+    /**
+     * Set the message window handle (called from main thread during init)
+     */
+    void SetMessageWindowHandle(HWND hwnd) { messageWindow = hwnd; }
+    
+    /**
+     * Get the message window handle
+     */
+    HWND GetMessageWindowHandle() const { return messageWindow; }
+    
+    /**
+     * Process pending selection requests
+     * Must be called from the main thread (via message window callback)
+     */
+    void ProcessSelectionQueue();
+    
+    /**
+     * Set the WebApp folder path
+     */
+    void SetWebAppPath(const GS::UniString& path) { webAppPath = path; }
 
 private:
     /**
@@ -151,6 +190,22 @@ private:
      * Create JSON success response
      */
     static HttpResponse CreateJsonResponse(const GS::UniString& json);
+    
+    /**
+     * Queue a selection request for main-thread processing
+     * Called from HTTP handler (background thread)
+     */
+    bool QueueSelectionRequest(const GS::UniString& guid);
+    
+    /**
+     * Handle static file serving from WebApp folder
+     */
+    HttpResponse HandleStaticFile(const GS::UniString& path);
+    
+    /**
+     * Get MIME type for file extension
+     */
+    static GS::UniString GetMimeType(const GS::UniString& path);
 
     // Server configuration
     int port;
@@ -170,7 +225,20 @@ private:
     // Cached configuration state
     bool configsLoaded;
     GS::Array<IFCConfiguration> cachedConfigs;
+    
+    // Thread-safe selection queue for main-thread processing
+    std::queue<SelectionRequest*> selectionQueue;
+    std::mutex queueMutex;
+    
+    // Hidden window handle for receiving messages on the main thread
+    HWND messageWindow;
+    
+    // Path to the WebApp folder for static file serving
+    GS::UniString webAppPath;
 };
+
+// Global function to get the API server instance (for message window callback)
+ArchiCADApiServer* GetApiServerInstance();
 
 } // namespace IfcTester
 

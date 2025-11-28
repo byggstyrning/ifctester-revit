@@ -6,6 +6,7 @@
     import { ChevronRightIcon, LinkIcon, XIcon } from "@lucide/svelte";
     import { Bonsai, connect, disconnect, runAudit as runBonsaiAudit } from "$src/modules/api/bonsai.svelte.js";
     import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportIfc } from "$src/modules/api/revit.svelte.js";
+    import { ArchiCAD, connect as connectArchiCAD, disconnect as disconnectArchiCAD, runAudit as runArchiCADAudit, getIfcConfigurations as getArchiCADIfcConfigurations, exportIfc as exportArchiCADIfc } from "$src/modules/api/archicad.svelte.js";
     import { onMount } from 'svelte';
     
     let isAuditing = $state(false);
@@ -201,6 +202,9 @@
         if (Bonsai.enabled) {
             activeTab = 'bonsai';
             connect();
+        } else if (ArchiCAD.enabled) {
+            activeTab = 'archicad';
+            await connectArchiCAD();
         } else if (Revit.enabled) {
             activeTab = 'revit';
             await connectRevit();
@@ -251,15 +255,21 @@
             <Tooltip.Root disableHoverableContent="true">
                 <Tooltip.Trigger>
                     <button class="tb-btn {activeTab === 'revit' ? 'active' : ''}" onclick={() => activeTab = 'revit'} aria-label="Revit Integration">
-                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                            <line x1="12" y1="22.08" x2="12" y2="12"/>
-                        </svg>
+                        <img src="/images/revit-icon.svg" alt="Revit" width="24" height="24" />
                     </button>
                 </Tooltip.Trigger>
                 <Tooltip.Content side="right">
                     <p>Revit Integration</p>
+                </Tooltip.Content>
+            </Tooltip.Root>
+            <Tooltip.Root disableHoverableContent="true">
+                <Tooltip.Trigger>
+                    <button class="tb-btn {activeTab === 'archicad' ? 'active' : ''}" onclick={() => activeTab = 'archicad'} aria-label="ArchiCAD Integration">
+                        <img src="/images/archicad-icon.svg" alt="ArchiCAD" width="24" height="24" />
+                    </button>
+                </Tooltip.Trigger>
+                <Tooltip.Content side="right">
+                    <p>ArchiCAD Integration</p>
                 </Tooltip.Content>
             </Tooltip.Root>
         </Tooltip.Provider>
@@ -273,7 +283,7 @@
                     </svg>
                 </button>
             {:else}
-                <h1>{activeTab === 'home' ? 'IFC Models' : activeTab === 'bonsai' ? 'Bonsai Integration' : 'Revit Integration'}</h1>
+                <h1>{activeTab === 'home' ? 'IFC Models' : activeTab === 'bonsai' ? 'Bonsai Integration' : activeTab === 'revit' ? 'Revit Integration' : 'ArchiCAD Integration'}</h1>
                 <button onclick={() => isMinimized = true} aria-label="Minimize Toolbar">
                     <svg class="w-6 h-6 text-gray-800 dark:text-white" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
                         <path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8.99994 10 7 11.9999l1.99994 2M12 5v14M5 4h14c.5523 0 1 .44772 1 1v14c0 .5523-.4477 1-1 1H5c-.55228 0-1-.4477-1-1V5c0-.55228.44772-1 1-1Z"/>
@@ -462,11 +472,7 @@
             {:else if activeTab === 'revit'}
                 {#if !Revit.enabled}
                     <div class="empty-state">
-                        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                            <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
-                            <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
-                            <line x1="12" y1="22.08" x2="12" y2="12"/>
-                        </svg>
+                        <img src="/images/revit-icon.svg" alt="Revit" width="48" height="48" style="opacity: 0.5;" />
                         <p>Revit Integration disabled</p>
                         <p class="help-text">Please run the app from within Revit</p>
                     </div>
@@ -595,6 +601,114 @@
                             <div class="section">
                                 <button class="audit-btn" onclick={handleRevitAudit} disabled={Revit.auditing || isAuditing || !IDS.Module.activeDocument}>
                                     {#if Revit.auditing || isAuditing}
+                                        <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                                        </svg>
+                                        Running Audit...
+                                    {:else}
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10"/>
+                                            <polyline points="12,6 12,12 16,14"/>
+                                        </svg>
+                                        Run Audit
+                                    {/if}
+                                </button>
+                                {#if !IDS.Module.activeDocument}
+                                    <p class="help-text">Create or open an IDS document to enable auditing</p>
+                                {/if}
+                            </div>
+                        {/if}
+                    {/if}
+                {/if}
+            {:else if activeTab === 'archicad'}
+                {#if !ArchiCAD.enabled}
+                    <div class="empty-state">
+                        <img src="/images/archicad-icon.svg" alt="ArchiCAD" width="48" height="48" style="opacity: 0.5;" />
+                        <p>ArchiCAD Integration disabled</p>
+                        <p class="help-text">Please run the app from within ArchiCAD</p>
+                    </div>
+                {:else}
+                    <div class="section">
+                        <h3>Connection Status</h3>
+                        <div class="connection-status {ArchiCAD.connected ? 'connected' : 'disconnected'}">
+                            <div class="status-indicator"></div>
+                            <span class="status-text">
+                                {ArchiCAD.connected ? 'Connected' : 'Not Connected'}
+                            </span>
+                            {#if ArchiCAD.apiUrl}
+                                <span class="status-details">{ArchiCAD.apiUrl}</span>
+                            {/if}
+                        </div>
+                        
+                        <button class="load-btn" onclick={ArchiCAD.connected ? disconnectArchiCAD : connectArchiCAD} disabled={ArchiCAD.loading}>
+                            {#if ArchiCAD.loading}
+                                <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                                </svg>
+                                Connecting...
+                            {:else if ArchiCAD.connected}
+                                <XIcon size={18} />
+                                Disconnect
+                            {:else}
+                                <LinkIcon size={18} />
+                                Connect
+                            {/if}
+                        </button>
+                    </div>
+                    
+                    {#if ArchiCAD.connected}
+                        <div class="section">
+                            <h3>Load IFC File</h3>
+                            <button class="load-btn" onclick={handleLoadModel} disabled={IFCModels.isLoading}>
+                                {#if IFCModels.isLoading}
+                                    <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                                    </svg>
+                                    Loading...
+                                {:else}
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z"/>
+                                        <polyline points="14,2 14,8 20,8"/>
+                                    </svg>
+                                    Load IFC Model
+                                {/if}
+                            </button>
+                        </div>
+                        
+                        {#if IFCModels.models.length > 0}
+                            <div class="section">
+                                <h3>Loaded Models</h3>
+                                <div class="models-list">
+                                    {#each IFCModels.models as model}
+                                        <div class="model-item">
+                                            <div class="model-info">
+                                                <Tooltip.Provider>
+                                                    <Tooltip.Root delayDuration={0}>
+                                                        <Tooltip.Trigger>
+                                                            <div class="model-name">{model.fileName}</div>
+                                                        </Tooltip.Trigger>
+                                                        <Tooltip.Content>
+                                                            <p>{model.fileName}</p>
+                                                        </Tooltip.Content>
+                                                    </Tooltip.Root>
+                                                </Tooltip.Provider>
+                                                <div class="model-meta">
+                                                    <span class="model-size">{formatFileSize(model.fileSize)}</span>
+                                                </div>
+                                            </div>
+                                            <button class="unload-btn" onclick={() => handleUnloadModel(model.id)} title="Unload model" aria-label="Unload model">
+                                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                    <path d="M18 6L6 18M6 6l12 12"/>
+                                                </svg>
+                                            </button>
+                                        </div>
+                                    {/each}
+                                </div>
+                            </div>
+                            
+                            <div class="section">
+                                <button class="audit-btn" onclick={handleRunAudit} disabled={ArchiCAD.auditing || isAuditing || !IDS.Module.activeDocument}>
+                                    {#if ArchiCAD.auditing || isAuditing}
                                         <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                             <path d="M21 12a9 9 0 11-6.219-8.56"/>
                                         </svg>
@@ -972,14 +1086,30 @@
         transition: all 0.2s;
     }
     
+    .tb-btn img {
+        width: 24px;
+        height: 24px;
+        object-fit: contain;
+        filter: brightness(0.7);
+        transition: filter 0.2s;
+    }
+    
     .tb-btn:hover {
         background: #ffffff12;
         color: #ffffffd9;
     }
     
+    .tb-btn:hover img {
+        filter: brightness(1);
+    }
+    
     .tb-btn.active {
         background: #ffffff1a;
         color: #ffffffd9;
+    }
+    
+    .tb-btn.active img {
+        filter: brightness(1);
     }
     
     .tb-btn.active::after {

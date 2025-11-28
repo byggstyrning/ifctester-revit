@@ -259,6 +259,7 @@ class WASMModule extends EventEmitter {
 
     /**
      * Validate an IDS object
+     * Returns { valid: boolean, html: string }
      */
     async validateIDS(idsObj) {
         return await this._apiCall('validateIDS', idsObj);

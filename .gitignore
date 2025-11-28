@@ -4,8 +4,36 @@
 **/dist-ssr/
 **/publish/
 **/revit/built/
+**/archicad/Build/
+**/archicad/out/
+
+# CMake build directory (generated - CMake will recreate this)
+# Note: CMake generates all files in cmake-build/ from CMakeLists.txt
+# To build: Run CMake configure first, then build
+**/archicad/cmake-build/
+
+# Build artifacts (generated files)
 *.dll
 *.pdb
+*.apx
+*.exp
+*.lib
+*.ilk
+*.tlog
+*.recipe
+*.res
+*.i
+*.rc2
+*.reslist.txt
+*.stamp
+UpgradeLog.htm
+
+# CMake generated files (but keep CMakeLists.txt and CMakeSettings.json)
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.vcxproj.user
+*.vcxproj.filters
 
 # Node modules
 **/node_modules/

@@ -4,6 +4,8 @@ import { svelte } from '@sveltejs/vite-plugin-svelte';
 import path from "path";
 
 export default defineConfig({
+    // Use relative paths for file:// compatibility (ArchiCAD embedded browser)
+    base: './',
     plugins: [
         tailwindcss(), 
         svelte({

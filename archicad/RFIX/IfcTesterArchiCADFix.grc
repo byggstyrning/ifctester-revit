@@ -4,9 +4,9 @@
 // Contains MDID (Module Identifier) resource
 // ******************************************************************************/
 
+#include "MDIDs_APICD.h"
+
 'MDID' 32500 "Add-On Identifier" {
-    /* These are placeholder IDs - generate unique ones at: */
-    /* https://archicadapi.graphisoft.com/profile/add-ons */
-    100000001
-    100000002
+    628121456
+    1703304677
 }

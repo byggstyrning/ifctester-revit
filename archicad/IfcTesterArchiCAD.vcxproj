@@ -31,14 +31,14 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>true</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+      <PlatformToolset>v142</PlatformToolset>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
     <ConfigurationType>DynamicLibrary</ConfigurationType>
     <UseDebugLibraries>false</UseDebugLibraries>
-    <PlatformToolset>v143</PlatformToolset>
+      <PlatformToolset>v142</PlatformToolset>
     <WholeProgramOptimization>true</WholeProgramOptimization>
     <CharacterSet>Unicode</CharacterSet>
   </PropertyGroup>
@@ -61,6 +61,10 @@
         $(ArchiCADDevKitPath)\Support\Modules\GSRoot;
         $(ArchiCADDevKitPath)\Support\Modules\GSUtils;
         $(ArchiCADDevKitPath)\Support\Modules\InputOutput;
+        $(ArchiCADDevKitPath)\Support\Modules\CADInfrastructureBase;
+        $(ArchiCADDevKitPath)\Support\Modules\RS;
+        $(ArchiCADDevKitPath)\Support\Modules\Graphix;
+        $(ArchiCADDevKitPath)\Support\Modules\JavascriptEngine;
         %(AdditionalIncludeDirectories)
       </AdditionalIncludeDirectories>
       <PreprocessorDefinitions>
@@ -82,15 +86,23 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>
-        $(ArchiCADDevKitPath)\Support\Lib\Win;
+        $(ArchiCADDevKitPath)\Support\Lib;
+        $(ArchiCADDevKitPath)\Support\Modules\DGLib\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\GSRoot\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\GSUtils\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\InputOutput\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\JavascriptEngine\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\RS\Win;
         %(AdditionalLibraryDirectories)
       </AdditionalLibraryDirectories>
       <AdditionalDependencies>
-        ACAP_STAT.lib;
-        DGLib.lib;
-        GSRoot.lib;
-        GSUtils.lib;
-        InputOutput.lib;
+        ACAP_STATD.lib;
+        DGImp.LIB;
+        GSRootImp.LIB;
+        GSUtilsImp.LIB;
+        InputOutputImp.LIB;
+        JavascriptEngineImp.LIB;
+        RSImp.LIB;
         ws2_32.lib;
         %(AdditionalDependencies)
       </AdditionalDependencies>
@@ -109,6 +121,10 @@
         $(ArchiCADDevKitPath)\Support\Modules\GSRoot;
         $(ArchiCADDevKitPath)\Support\Modules\GSUtils;
         $(ArchiCADDevKitPath)\Support\Modules\InputOutput;
+        $(ArchiCADDevKitPath)\Support\Modules\CADInfrastructureBase;
+        $(ArchiCADDevKitPath)\Support\Modules\RS;
+        $(ArchiCADDevKitPath)\Support\Modules\Graphix;
+        $(ArchiCADDevKitPath)\Support\Modules\JavascriptEngine;
         %(AdditionalIncludeDirectories)
       </AdditionalIncludeDirectories>
       <PreprocessorDefinitions>
@@ -118,6 +134,7 @@
         _USRDLL;
         UNICODE;
         _UNICODE;
+        _ITERATOR_DEBUG_LEVEL=0;
         ACExtension;
         %(PreprocessorDefinitions)
       </PreprocessorDefinitions>
@@ -131,15 +148,23 @@
     </ClCompile>
     <Link>
       <AdditionalLibraryDirectories>
-        $(ArchiCADDevKitPath)\Support\Lib\Win;
+        $(ArchiCADDevKitPath)\Support\Lib;
+        $(ArchiCADDevKitPath)\Support\Modules\DGLib\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\GSRoot\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\GSUtils\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\InputOutput\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\JavascriptEngine\Win;
+        $(ArchiCADDevKitPath)\Support\Modules\RS\Win;
         %(AdditionalLibraryDirectories)
       </AdditionalLibraryDirectories>
       <AdditionalDependencies>
         ACAP_STAT.lib;
-        DGLib.lib;
-        GSRoot.lib;
-        GSUtils.lib;
-        InputOutput.lib;
+        DGImp.LIB;
+        GSRootImp.LIB;
+        GSUtilsImp.LIB;
+        InputOutputImp.LIB;
+        JavascriptEngineImp.LIB;
+        RSImp.LIB;
         ws2_32.lib;
         %(AdditionalDependencies)
       </AdditionalDependencies>
@@ -167,7 +192,9 @@
 
   <!-- Resource Files -->
   <ItemGroup>
-    <ResourceCompile Include="RFIX.win\IfcTesterArchiCAD.rc2" />
+    <ResourceCompile Include="RFIX.win\IfcTesterArchiCAD.rc2">
+      <AdditionalIncludeDirectories>$(IntDir);$(ArchiCADDevKitPath)\Support\Inc;$(ArchiCADDevKitPath)\Support\Modules\DGLib;%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
   </ItemGroup>
 
   <!-- GRC Resource Files -->
@@ -186,10 +213,23 @@
   <!-- Pre-build: Compile GRC files using ResConv -->
   <Target Name="CompileGRC" BeforeTargets="ClCompile">
     <Message Text="Compiling GRC resource files..." Importance="High" />
-    <Exec Command="&quot;$(ArchiCADDevKitPath)\Support\Tools\Win\ResConv.exe&quot; -m r -T W -q utf8 -w 2 &quot;$(ProjectDir)RFIX\IfcTesterArchiCADFix.grc&quot;" 
-          ContinueOnError="true" />
-    <Exec Command="&quot;$(ArchiCADDevKitPath)\Support\Tools\Win\ResConv.exe&quot; -m r -T W -q utf8 -w 2 &quot;$(ProjectDir)RINT\IfcTesterArchiCAD.grc&quot;" 
-          ContinueOnError="true" />
+    <MakeDir Directories="$(IntDir)" Condition="!Exists('$(IntDir)')" />
+    
+    <!-- Preprocess RFIX GRC file -->
+    <Exec Command="cl /nologo /X /EP /P /I&quot;$(ArchiCADDevKitPath)\Support\Inc&quot; /I&quot;$(ArchiCADDevKitPath)\Support\Modules\DGLib&quot; /I&quot;$(ProjectDir)Src&quot; /DWINDOWS /utf-8 /Fi&quot;$(IntDir)IfcTesterArchiCADFix.grc.i&quot; &quot;$(ProjectDir)RFIX\IfcTesterArchiCADFix.grc&quot;" 
+          ContinueOnError="false" />
+    
+    <!-- Compile RFIX GRC to RC2 -->
+    <Exec Command="&quot;$(ArchiCADDevKitPath)\Support\Tools\Win\ResConv.exe&quot; -m r -T W -q utf8 utf8 -w 2 -p &quot;$(ProjectDir)RFIX&quot; -i &quot;$(IntDir)IfcTesterArchiCADFix.grc.i&quot; -o &quot;$(IntDir)IfcTesterArchiCADFix.grc.rc2&quot;" 
+          ContinueOnError="false" />
+    
+    <!-- Preprocess RINT GRC file -->
+    <Exec Command="cl /nologo /X /EP /P /I&quot;$(ArchiCADDevKitPath)\Support\Inc&quot; /I&quot;$(ArchiCADDevKitPath)\Support\Modules\DGLib&quot; /I&quot;$(ProjectDir)Src&quot; /DWINDOWS /utf-8 /Fi&quot;$(IntDir)IfcTesterArchiCAD.grc.i&quot; &quot;$(ProjectDir)RINT\IfcTesterArchiCAD.grc&quot;" 
+          ContinueOnError="false" />
+    
+    <!-- Compile RINT GRC to RC2 -->
+    <Exec Command="&quot;$(ArchiCADDevKitPath)\Support\Tools\Win\ResConv.exe&quot; -m r -T W -q utf8 utf8 -w 2 -p &quot;$(ProjectDir)RINT&quot; -i &quot;$(IntDir)IfcTesterArchiCAD.grc.i&quot; -o &quot;$(IntDir)IfcTesterArchiCAD.grc.rc2&quot;" 
+          ContinueOnError="false" />
   </Target>
 
   <!-- Post-build: Copy web app to output -->

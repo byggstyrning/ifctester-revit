@@ -43,7 +43,8 @@ if (-not $DevKitPath) {
     $PossiblePaths = @(
         "C:\Program Files\GRAPHISOFT\API Development Kit $ArchiCADVersion",
         "C:\Program Files (x86)\GRAPHISOFT\API Development Kit $ArchiCADVersion",
-        "$env:USERPROFILE\GRAPHISOFT\API Development Kit $ArchiCADVersion"
+        "$env:USERPROFILE\GRAPHISOFT\API Development Kit $ArchiCADVersion",
+        "C:\code\archicad-api\API.Development.Kit.WIN.$ArchiCADVersion.3100"
     )
     
     foreach ($Path in $PossiblePaths) {

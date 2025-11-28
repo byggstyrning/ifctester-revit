@@ -11,38 +11,57 @@
     };
     
     const setProp = (prop, value) => {
-        activeSpecification[prop] = value;
-    };
-
-    const addIfcVersion = (e, version) => {
-        if (activeSpecification) {
-            if (!("@ifcVersion" in activeSpecification)) activeSpecification["@ifcVersion"] = [];
-            if (e.target.checked) {
-                if (!activeSpecification["@ifcVersion"].includes(version)) {
-                    activeSpecification["@ifcVersion"] = [...activeSpecification["@ifcVersion"], version];
-                }
-            } else {
-                activeSpecification["@ifcVersion"] = activeSpecification["@ifcVersion"].filter(v => v !== version);
+        if (!activeSpecification || !IDS.Module.activeDocument || documentState?.activeSpecification === null) return;
+        // Mutate directly on the state object to ensure reactivity
+        const doc = IDS.Module.documents[IDS.Module.activeDocument];
+        if (doc && doc.specifications?.specification) {
+            const spec = doc.specifications.specification[documentState.activeSpecification];
+            if (spec) {
+                spec[prop] = value;
             }
         }
     };
 
+    const addIfcVersion = (e, version) => {
+        if (!IDS.Module.activeDocument || documentState?.activeSpecification === null) return;
+        const doc = IDS.Module.documents[IDS.Module.activeDocument];
+        if (!doc || !doc.specifications?.specification) return;
+        
+        const spec = doc.specifications.specification[documentState.activeSpecification];
+        if (!spec) return;
+        
+        if (!("@ifcVersion" in spec)) spec["@ifcVersion"] = [];
+        if (e.target.checked) {
+            if (!spec["@ifcVersion"].includes(version)) {
+                spec["@ifcVersion"] = [...spec["@ifcVersion"], version];
+            }
+        } else {
+            spec["@ifcVersion"] = spec["@ifcVersion"].filter(v => v !== version);
+        }
+    };
+
     const setUsage = (usage) => {
-        if (!activeSpecification) return;
-        if (!activeSpecification.applicability) activeSpecification.applicability = {};
+        if (!IDS.Module.activeDocument || documentState?.activeSpecification === null) return;
+        const doc = IDS.Module.documents[IDS.Module.activeDocument];
+        if (!doc || !doc.specifications?.specification) return;
+        
+        const spec = doc.specifications.specification[documentState.activeSpecification];
+        if (!spec) return;
+        
+        if (!spec.applicability) spec.applicability = {};
         
         switch (usage) {
             case 'required':
-                activeSpecification.applicability["@minOccurs"] = 1;
-                activeSpecification.applicability["@maxOccurs"] = "unbounded";
+                spec.applicability["@minOccurs"] = 1;
+                spec.applicability["@maxOccurs"] = "unbounded";
                 break;
             case 'optional':
-                activeSpecification.applicability["@minOccurs"] = 0;
-                activeSpecification.applicability["@maxOccurs"] = "unbounded";
+                spec.applicability["@minOccurs"] = 0;
+                spec.applicability["@maxOccurs"] = "unbounded";
                 break;
             case 'prohibited':
-                activeSpecification.applicability["@minOccurs"] = 0;
-                activeSpecification.applicability["@maxOccurs"] = 0;
+                spec.applicability["@minOccurs"] = 0;
+                spec.applicability["@maxOccurs"] = 0;
                 break;
         }
     };

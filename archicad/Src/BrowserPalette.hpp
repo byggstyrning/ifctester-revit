@@ -3,6 +3,8 @@
  * 
  * Browser Palette Header
  * Defines the dockable palette with browser control for the IfcTester web interface.
+ * 
+ * Compatible with ArchiCAD 27
  */
 
 #ifndef BROWSER_PALETTE_HPP
@@ -12,6 +14,7 @@
 #include "DGModule.hpp"
 #include "DGBrowser.hpp"
 #include "DGDialog.hpp"
+#include "JSValues.hpp"
 
 namespace IfcTester {
 
@@ -21,8 +24,7 @@ namespace IfcTester {
  * that hosts the IfcTester web application.
  */
 class BrowserPalette : public DG::Palette,
-                       public DG::PanelObserver,
-                       public DG::BrowserObserver
+                       public DG::PanelObserver
 {
 public:
     /**
@@ -67,9 +69,6 @@ protected:
     virtual void PanelResized(const DG::PanelResizeEvent& ev) override;
     virtual void PanelCloseRequested(const DG::PanelCloseRequestEvent& ev, bool* accepted) override;
     virtual void PanelClosed(const DG::PanelCloseEvent& ev) override;
-    
-    // DG::BrowserObserver overrides
-    virtual void BrowserLoadFinished(const DG::BrowserLoadEvent& ev) override;
 
 private:
     /**
@@ -85,29 +84,34 @@ private:
     void RegisterACAPIJavaScriptObject();
     
     /**
+     * Handler for browser loading state changes
+     */
+    void OnBrowserLoadingStateChange(const DG::BrowserBase& source, const DG::BrowserLoadingStateChangeArg& eventArg);
+    
+    /**
      * Convert element info array to JavaScript variable
      */
-    static GS::Ref<DG::JSBase> ConvertToJavaScriptVariable(const GS::Array<ElementInfo>& elements);
+    static GS::Ref<JS::Base> ConvertToJavaScriptVariable(const GS::Array<ElementInfo>& elements);
     
     /**
      * Convert IFC configurations to JavaScript variable
      */
-    static GS::Ref<DG::JSBase> ConvertToJavaScriptVariable(const GS::Array<IFCConfiguration>& configs);
+    static GS::Ref<JS::Base> ConvertToJavaScriptVariable(const GS::Array<IFCConfiguration>& configs);
     
     /**
      * Convert boolean to JavaScript variable
      */
-    static GS::Ref<DG::JSBase> ConvertToJavaScriptVariable(bool value);
+    static GS::Ref<JS::Base> ConvertToJavaScriptVariable(bool value);
     
     /**
      * Convert string to JavaScript variable
      */
-    static GS::Ref<DG::JSBase> ConvertToJavaScriptVariable(const GS::UniString& value);
+    static GS::Ref<JS::Base> ConvertToJavaScriptVariable(const GS::UniString& value);
     
     /**
      * Get string from JavaScript variable
      */
-    static GS::UniString GetStringFromJavaScriptVariable(GS::Ref<DG::JSBase> param);
+    static GS::UniString GetStringFromJavaScriptVariable(GS::Ref<JS::Base> param);
     
     /**
      * Palette control callback
@@ -119,9 +123,6 @@ private:
     
     // Palette GUID for registration
     static const GS::Guid paletteGuid;
-    
-    // URL for the web application
-    static const char* siteURL;
     
     // Singleton instance
     static BrowserPalette* instance;

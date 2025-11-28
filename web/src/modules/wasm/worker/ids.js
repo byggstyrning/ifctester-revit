@@ -47,17 +47,44 @@ export function openIDS(ids_xml, validate = false) {
 }
 
 export function validateIDS(idsObj) {
-    const ids_raw = _idsToInstance(idsObj)
-    const tempFilename = `temp_${Date.now()}.xml`;
-    const isValid = ids_raw.to_xml(tempFilename); // to_xml validates the XML as well, as far as I understand
-  
-    pyodide.runPython(`
-        import os
-        if os.path.exists("${tempFilename}"):
-            os.remove("${tempFilename}")
-    `);
-    
-    return isValid;
+    try {
+        const ids_raw = _idsToInstance(idsObj)
+        const tempFilename = `temp_${Date.now()}.xml`;
+        const isValid = ids_raw.to_xml(tempFilename); // to_xml validates the XML as well, as far as I understand
+      
+        pyodide.runPython(`
+            import os
+            if os.path.exists("${tempFilename}"):
+                os.remove("${tempFilename}")
+        `);
+        
+        if (isValid) {
+            return {
+                valid: true,
+                html: '<div style="padding: 20px; color: #10b981;"><h2>✓ IDS Document is Valid</h2><p>The IDS document structure is valid and conforms to the IDS schema.</p></div>'
+            };
+        } else {
+            return {
+                valid: false,
+                html: '<div style="padding: 20px; color: #ef4444;"><h2>✗ IDS Document Validation Failed</h2><p>The IDS document structure is invalid. Please check the document structure.</p></div>'
+            };
+        }
+    } catch (error) {
+        // Catch validation errors and format them as HTML
+        const errorMessage = error.toString();
+        const errorHtml = `
+            <div style="padding: 20px;">
+                <h2 style="color: #ef4444; margin-top: 0;">✗ IDS Document Validation Failed</h2>
+                <div style="background: #1f2937; padding: 15px; border-radius: 6px; margin-top: 10px;">
+                    <pre style="color: #ff8282; margin: 0; white-space: pre-wrap; font-family: 'Courier New', monospace; font-size: 13px;">${errorMessage.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</pre>
+                </div>
+            </div>
+        `;
+        return {
+            valid: false,
+            html: errorHtml
+        };
+    }
 }
 
 export function exportIDS(idsObj) {

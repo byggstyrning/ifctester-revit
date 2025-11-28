@@ -1,0 +1,6 @@
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- ArchiCAD Logo - Building/Architecture icon -->
+  <path d="M4 20h16v-2H4v2zm0-4h16v-2H4v2zm0-4h16v-2H4v2zm0-4h16V6H4v2zm0-4h16V4H4v2z" fill="currentColor" opacity="0.1"/>
+  <path d="M5 4h14v16H5V4zm2 2v12h10V6H7z" fill="currentColor"/>
+  <path d="M8 8h8v2H8V8zm0 4h8v2H8v-2zm0 4h5v2H8v-2z" fill="currentColor" opacity="0.8"/>
+</svg>

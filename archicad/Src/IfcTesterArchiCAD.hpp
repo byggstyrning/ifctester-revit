@@ -33,6 +33,11 @@ constexpr short BrowserId               = 1;
 // API Server Port (matches Revit implementation)
 constexpr int ApiServerPort             = 48882; // Different port from Revit (48881)
 
+// Add-On Version (update this when making significant changes)
+constexpr const char* AddOnVersion       = "1.0.0";
+constexpr const char* BuildDate          = __DATE__;
+constexpr const char* BuildTime          = __TIME__;
+
 // Forward declarations
 namespace IfcTester {
     class BrowserPalette;
@@ -47,7 +52,7 @@ struct ElementInfo {
     GS::UniString guidStr;      // Element GUID as string
     GS::UniString typeName;     // Element type name
     GS::UniString elemID;       // Element ID string
-    API_ElemTypeID typeID;      // Element type ID
+    API_ElemType type;          // Element type (AC27+)
 };
 
 /**

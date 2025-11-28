@@ -4,7 +4,8 @@
     import { error, success } from "$src/modules/utils/toast.svelte.js";
     import * as Tooltip from "$src/lib/components/ui/tooltip";
     import * as CopyableText from "$src/lib/components/ui/copyable-text";
-    import { Revit, selectElement } from "$src/modules/api/revit.svelte.js";
+    import { Revit, selectElement as selectElementRevit } from "$src/modules/api/revit.svelte.js";
+    import { ArchiCAD, selectElement as selectElementArchiCAD } from "$src/modules/api/archicad.svelte.js";
 
     let activeDocument = $derived(IDS.Module.activeDocument ? IDS.Module.documents[IDS.Module.activeDocument] : null);
     let documentState = $derived(IDS.Module.activeDocument ? IDS.Module.states[IDS.Module.activeDocument] : null);
@@ -130,14 +131,31 @@
     async function handleSelectElement(globalId) {
         if (!globalId || globalId === '-') return;
         
-        if (Revit.enabled && Revit.connected) {
+        if (ArchiCAD.enabled && ArchiCAD.connected) {
             try {
-                await selectElement(globalId);
+                await selectElementArchiCAD(globalId);
+            } catch (err) {
+                error(`Failed to select element: ${err.message}`);
+            }
+        } else if (Revit.enabled && Revit.connected) {
+            try {
+                await selectElementRevit(globalId);
             } catch (err) {
                 error(`Failed to select element: ${err.message}`);
             }
         }
     }
+    
+    // Helper to check if any BIM tool is connected
+    const isBimToolConnected = $derived(
+        (ArchiCAD.enabled && ArchiCAD.connected) || (Revit.enabled && Revit.connected)
+    );
+    
+    // Helper to get the active BIM tool name
+    const activeBimToolName = $derived(
+        ArchiCAD.enabled && ArchiCAD.connected ? 'ArchiCAD' :
+        Revit.enabled && Revit.connected ? 'Revit' : null
+    );
 </script>
 
 <div class="ids-viewer">
@@ -349,7 +367,7 @@
                                                                                     <table class="entity-table">
                                                                                     <thead>
                                                                                         <tr>
-                                                                                            {#if Revit.enabled && Revit.connected}
+                                                                                            {#if isBimToolConnected}
                                                                                                 <th>Select</th>
                                                                                             {/if}
                                                                                             <th>Class</th>
@@ -363,9 +381,9 @@
                                                                                     <tbody>
                                                                                         {#each reqAuditData.passed_entities.slice(0, 10) as entity}
                                                                                             <tr>
-                                                                                                {#if Revit.enabled && Revit.connected && entity.global_id && entity.global_id !== '-'}
+                                                                                                {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
                                                                                                     <td>
-                                                                                                        <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in Revit">
+                                                                                                        <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in {activeBimToolName || 'BIM tool'}">
                                                                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                                                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                                                                                                                 <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
@@ -373,7 +391,7 @@
                                                                                                             </svg>
                                                                                                         </button>
                                                                                                     </td>
-                                                                                                {:else if Revit.enabled && Revit.connected}
+                                                                                                {:else if isBimToolConnected}
                                                                                                     <td>-</td>
                                                                                                 {/if}
                                                                                                 <td><CopyableText.Root value={entity.class} /></td>
@@ -386,7 +404,7 @@
                                                                                         {/each}
                                                                                         {#if reqAuditData.passed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={Revit.enabled && Revit.connected ? "7" : "6"}>... {reqAuditData.passed_entities.length - 10} more passing elements not shown ...</td>
+                                                                                                <td colspan={isBimToolConnected ? "7" : "6"}>... {reqAuditData.passed_entities.length - 10} more passing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>
@@ -404,7 +422,7 @@
                                                                                     <table class="entity-table">
                                                                                     <thead>
                                                                                         <tr>
-                                                                                            {#if Revit.enabled && Revit.connected}
+                                                                                            {#if isBimToolConnected}
                                                                                                 <th>Select</th>
                                                                                             {/if}
                                                                                             <th>Class</th>
@@ -419,9 +437,9 @@
                                                                                     <tbody>
                                                                                         {#each reqAuditData.failed_entities.slice(0, 10) as entity}
                                                                                             <tr>
-                                                                                                {#if Revit.enabled && Revit.connected && entity.global_id && entity.global_id !== '-'}
+                                                                                                {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
                                                                                                     <td>
-                                                                                                        <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in Revit">
+                                                                                                        <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in {activeBimToolName || 'BIM tool'}">
                                                                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                                                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
                                                                                                                 <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
@@ -429,7 +447,7 @@
                                                                                                             </svg>
                                                                                                         </button>
                                                                                                     </td>
-                                                                                                {:else if Revit.enabled && Revit.connected}
+                                                                                                {:else if isBimToolConnected}
                                                                                                     <td>-</td>
                                                                                                 {/if}
                                                                                                 <td><CopyableText.Root value={entity.class} /></td>
@@ -443,7 +461,7 @@
                                                                                         {/each}
                                                                                         {#if reqAuditData.failed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={Revit.enabled && Revit.connected ? "8" : "7"}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
+                                                                                                <td colspan={isBimToolConnected ? "8" : "7"}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>
