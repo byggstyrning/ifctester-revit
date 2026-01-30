@@ -2,11 +2,15 @@ cmake_minimum_required (VERSION 3.16)
 
 # ============================================================================
 # IfcTester ArchiCAD Add-On CMake Build
-# Based on official Graphisoft Browser_Control example
+# Based on official Graphisoft Browser_Control example (AC29)
 # ============================================================================
 
+# Find Python 3 (required for resource compilation)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+message(STATUS "Using Python: ${Python3_EXECUTABLE} (version ${Python3_VERSION})")
+
 function (SetCompilerOptions target)
-	target_compile_features (${target} PUBLIC cxx_std_17)
+	target_compile_features (${target} PUBLIC cxx_std_20)  # ArchiCAD 29 requires C++20
 	target_compile_options (${target} PUBLIC "$<$<CONFIG:Debug>:-DDEBUG>")
 	if (WIN32)
 		target_compile_options (${target} PUBLIC /W3 /WX- /wd4996 /Zc:wchar_t-)
@@ -41,6 +45,23 @@ function (AddGSModuleLinkLibrary target library)
 		foreach (lib ${libs})
 			target_link_libraries (${target} ${lib})
 		endforeach ()
+	elseif (APPLE)
+		# Mac: Link frameworks from Frameworks directory
+		if (IS_DIRECTORY "${library}")
+			# Link frameworks (standard macOS framework linking)
+			file (GLOB frameworks "${library}/*.framework")
+			foreach (framework ${frameworks})
+				get_filename_component (framework_name ${framework} NAME_WE)
+				# Use proper CMake framework linking
+				target_link_directories (${target} PRIVATE "${library}")
+				target_link_libraries (${target} PRIVATE "-framework" ${framework_name})
+			endforeach ()
+			# Also check for .a static libraries
+			file (GLOB libs "${library}/*.a")
+			foreach (lib ${libs})
+				target_link_libraries (${target} ${lib})
+			endforeach ()
+		endif ()
 	else ()
 		target_link_libraries (${target} ${library})
 	endif ()
@@ -57,7 +78,7 @@ set (CMAKE_CONFIGURATION_TYPES Debug;Release;RelWithDebInfo)
 if (WIN32)
 	# Only set toolset for Visual Studio generators (not Ninja)
 	if (CMAKE_GENERATOR MATCHES "Visual Studio")
-		set (CMAKE_GENERATOR_TOOLSET v142)
+		set (CMAKE_GENERATOR_TOOLSET v143)  # ArchiCAD 29 requires VS2022 (v143)
 	endif ()
 	set (CMAKE_MSVC_RUNTIME_LIBRARY MultiThreadedDLL)
 else ()
@@ -73,11 +94,19 @@ if (NOT DEFINED AC_API_DEVKIT_DIR)
 	if (DEFINED ENV{ARCHICAD_API_DEVKIT})
 		set (AC_API_DEVKIT_DIR "$ENV{ARCHICAD_API_DEVKIT}")
 	else ()
-		# Default paths to check
-		set (POSSIBLE_DEVKIT_PATHS
-			"C:/code/archicad-api/API.Development.Kit.WIN.27.6003"
-			"C:/Program Files/GRAPHISOFT/API Development Kit 27"
-		)
+		# Default paths to check - platform specific
+		if (WIN32)
+			set (POSSIBLE_DEVKIT_PATHS
+				"C:/code/archicad-api/API.Development.Kit.WIN.29.3100"
+				"C:/Program Files/GRAPHISOFT/API Development Kit 29"
+			)
+		elseif (APPLE)
+			set (POSSIBLE_DEVKIT_PATHS
+				"$ENV{HOME}/Library/Application Support/GRAPHISOFT/API Development Kit 29"
+				"/Applications/GRAPHISOFT/API Development Kit 29"
+				"/Users/Shared/GRAPHISOFT/API Development Kit 29"
+			)
+		endif ()
 		foreach (path ${POSSIBLE_DEVKIT_PATHS})
 			if (EXISTS "${path}/Support/Inc/ACAPinc.h")
 				set (AC_API_DEVKIT_DIR "${path}")
@@ -102,9 +131,9 @@ else ()
 endif ()
 
 if (WIN32)
-	add_definitions (-DUNICODE -D_UNICODE -D_ITERATOR_DEBUG_LEVEL=0)
+	add_definitions (-DUNICODE -D_UNICODE -D_ITERATOR_DEBUG_LEVEL=0 -DGS_WIN)
 else ()
-	add_definitions (-Dmacintosh=1)
+	add_definitions (-Dmacintosh=1 -DGS_MAC)
 endif ()
 add_definitions (-DACExtension)
 
@@ -153,16 +182,19 @@ if (WIN32)
 		DEPENDS ${AddOnResourceFiles} ${AddOnImageFiles}
 		COMMENT "Compiling resources..."
 		COMMAND ${CMAKE_COMMAND} -E make_directory "${ResourceObjectsDir}"
-		COMMAND python "${APIDevKitToolsFolderAbsolute}/CompileResources.py" "${AC_ADDON_LANGUAGE}" "${AC_API_DEVKIT_DIR}" "${AddOnSourcesFolderAbsolute}" "${AddOnResourcesFolderAbsolute}" "${ResourceObjectsDir}" "${ResourceObjectsDir}/${AC_ADDON_NAME}.res"
+		COMMAND ${Python3_EXECUTABLE} "${APIDevKitToolsFolderAbsolute}/CompileResources.py" "${AC_ADDON_LANGUAGE}" "${AC_API_DEVKIT_DIR}" "${AddOnSourcesFolderAbsolute}" "${AddOnResourcesFolderAbsolute}" "${ResourceObjectsDir}" "${ResourceObjectsDir}/${AC_ADDON_NAME}.res"
 		COMMAND ${CMAKE_COMMAND} -E touch "${ResourceObjectsDir}/AddOnResources.stamp"
 	)
 else ()
+	# Mac: Use generator expression for config-dependent paths
 	add_custom_command (
 		OUTPUT "${ResourceObjectsDir}/AddOnResources.stamp"
 		DEPENDS ${AddOnResourceFiles} ${AddOnImageFiles}
 		COMMENT "Compiling resources..."
 		COMMAND ${CMAKE_COMMAND} -E make_directory "${ResourceObjectsDir}"
-		COMMAND python "${APIDevKitToolsFolderAbsolute}/CompileResources.py" "${AC_ADDON_LANGUAGE}" "${AC_API_DEVKIT_DIR}" "${AddOnSourcesFolderAbsolute}" "${AddOnResourcesFolderAbsolute}" "${ResourceObjectsDir}" "${CMAKE_BINARY_DIR}/$<CONFIG>/${AC_ADDON_NAME}.bundle/Contents/Resources"
+		COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/$<CONFIG>/${AC_ADDON_NAME}.bundle/Contents/Resources"
+		COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_BINARY_DIR}/$<CONFIG>/${AC_ADDON_NAME}.bundle/Contents"
+		COMMAND ${Python3_EXECUTABLE} "${APIDevKitToolsFolderAbsolute}/CompileResources.py" "${AC_ADDON_LANGUAGE}" "${AC_API_DEVKIT_DIR}" "${AddOnSourcesFolderAbsolute}" "${AddOnResourcesFolderAbsolute}" "${ResourceObjectsDir}" "${CMAKE_BINARY_DIR}/$<CONFIG>/${AC_ADDON_NAME}.bundle/Contents/Resources"
 		COMMAND ${CMAKE_COMMAND} -E copy "${AC_API_DEVKIT_DIR}/Support/Inc/PkgInfo" "${CMAKE_BINARY_DIR}/$<CONFIG>/${AC_ADDON_NAME}.bundle/Contents/PkgInfo"
 		COMMAND ${CMAKE_COMMAND} -E touch "${ResourceObjectsDir}/AddOnResources.stamp"
 	)
@@ -255,12 +287,44 @@ foreach (linkLibFolder ${GSLinkLibFolders})
 endforeach ()
 
 # ============================================================================
+# Forced Includes (Required for AC29)
+# GSNew.hpp and GSMalloc.hpp must be included before any other headers
+# ============================================================================
+
+get_filename_component(new_hpp "${APIDevKitModulesDir}/GSRoot/GSNew.hpp" REALPATH)
+get_filename_component(malloc_hpp "${APIDevKitModulesDir}/GSRoot/GSMalloc.hpp" REALPATH)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+    target_compile_options(
+        AddOn PRIVATE
+        "SHELL:/FI \"${new_hpp}\""
+        "SHELL:/FI \"${malloc_hpp}\""
+    )
+elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang$")
+    target_compile_options(
+        AddOn PRIVATE
+        "SHELL:-include \"${new_hpp}\""
+        "SHELL:-include \"${malloc_hpp}\""
+    )
+else()
+    message(FATAL_ERROR "Unknown compiler ID.")
+endif()
+
+# ============================================================================
 # Post-build: Copy WebApp files
 # ============================================================================
 
-add_custom_command (TARGET AddOn POST_BUILD
-	COMMENT "Copying WebApp files..."
-	COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:AddOn>/WebApp"
-	COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_LIST_DIR}/../web/dist" "$<TARGET_FILE_DIR:AddOn>/WebApp"
-)
+if (WIN32)
+	add_custom_command (TARGET AddOn POST_BUILD
+		COMMENT "Copying WebApp files..."
+		COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:AddOn>/WebApp"
+		COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_LIST_DIR}/../web/dist" "$<TARGET_FILE_DIR:AddOn>/WebApp"
+	)
+else ()
+	# Mac: Copy to bundle Resources directory
+	add_custom_command (TARGET AddOn POST_BUILD
+		COMMENT "Copying WebApp files..."
+		COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:AddOn>/Contents/Resources/WebApp"
+		COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_LIST_DIR}/../web/dist" "$<TARGET_FILE_DIR:AddOn>/Contents/Resources/WebApp"
+	)
+endif ()
 

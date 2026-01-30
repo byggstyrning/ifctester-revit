@@ -53,13 +53,7 @@
     function getSpecificationStatus(specIndex, auditData) {
         const spec = auditData.specifications[specIndex];
         if (!spec) return null;
-        
-        // If no applicable elements and no checks, and it passed, it's actually skipped
-        if (spec.total_applicable === 0 && spec.total_checks === 0 && spec.status === true) {
-            return 'skipped';
-        }
-        
-        return spec.status;
+        return spec.is_skipped ? 'skipped' : spec.status;
     }
 
     function getSpecificationStats(specIndex, auditData) {
@@ -82,11 +76,13 @@
         const status = getSpecificationStatus(specIndex, auditData);
         
         if (status === 'skipped') {
-            return "Skipped because no applicable entities were found and the cardinality is OPTIONAL or PROHIBITED";
+            return "Skipped because no applicable entities were found and the cardinality is OPTIONAL";
         }
         
         if (status === false) { // Failed
-            if (spec.total_applicable === 0) {
+            if (spec.cardinality === 'prohibited') {
+                return `Failed because ${spec.total_applicable} prohibited entities were found`;
+            } else if (spec.total_applicable === 0) {
                 return "Failed because no applicable entities were found but the cardinality is REQUIRED";
             } else {
                 const failedChecks = spec.total_checks - spec.total_checks_pass;
@@ -272,6 +268,15 @@
                             {#if "@description" in spec}
                                 <p class="spec-description">{spec["@description"]}</p>
                             {/if}
+                            {#if spec.applicability["@minOccurs"] === 1 && spec.applicability["@maxOccurs"] === 'unbounded'}
+                                <span class="cardinality-badge required">Required</span>
+                            {/if}
+                            {#if spec.applicability["@minOccurs"] === 0 && spec.applicability["@maxOccurs"] === 'unbounded'}
+                                <span class="cardinality-badge optional">Optional</span>
+                            {/if}
+                            {#if spec.applicability["@minOccurs"] === 0 && spec.applicability["@maxOccurs"] === 0}
+                                <span class="cardinality-badge prohibited">Prohibited</span>
+                            {/if}
                             {#if auditReport}
                                 {@const reason = getSpecificationReason(index, auditReport.data)}
                                 {#if reason}
@@ -325,6 +330,69 @@
                                     {/each}
                                 </div>
                             </div>
+
+                            {#if auditReport}
+                                {@const status = getSpecificationStatus(index, auditReport.data)}
+                                {#if !status && spec.applicability["@maxOccurs"] == 0}
+                                    {@const specReport = auditReport.data.specifications[index]}
+                                    {#if specReport.applicable_entities && specReport.applicable_entities.length > 0}
+                                        <div class="facet-section">
+                                            <h3>Failed Elements ({specReport.applicable_entities.length})</h3>
+                                            <div class="entity-table-container">
+                                                <Tooltip.Provider>
+                                                    <table class="entity-table">
+                                                        <thead>
+                                                            <tr>
+                                                                {#if isBimToolConnected}
+                                                                    <th>Select</th>
+                                                                {/if}
+                                                                <th>Class</th>
+                                                                <th>PredefinedType</th>
+                                                                <th>Name</th>
+                                                                <th>Description</th>
+                                                                <th>Warning</th>
+                                                                <th>GlobalId</th>
+                                                                <th>Tag</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {#each specReport.applicable_entities.slice(0, 10) as entity}
+                                                                <tr>
+                                                                    {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
+                                                                        <td>
+                                                                            <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in {activeBimToolName || 'BIM tool'}">
+                                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                                                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+                                                                                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+                                                                                    <line x1="12" y1="22.08" x2="12" y2="12"/>
+                                                                                </svg>
+                                                                            </button>
+                                                                        </td>
+                                                                    {:else if isBimToolConnected}
+                                                                        <td>-</td>
+                                                                    {/if}
+                                                                    <td><CopyableText.Root value={entity.class} /></td>
+                                                                    <td><CopyableText.Root value={entity.predefined_type || '-'} /></td>
+                                                                    <td><CopyableText.Root value={entity.name || '-'} /></td>
+                                                                    <td><CopyableText.Root value={entity.description || '-'} /></td>
+                                                                    <td><CopyableText.Root value={entity.reason || '-'} /></td>
+                                                                    <td><CopyableText.Root value={entity.global_id || '-'} /></td>
+                                                                    <td><CopyableText.Root value={entity.tag || '-'} /></td>
+                                                                </tr>
+                                                            {/each}
+                                                            {#if specReport.applicable_entities.length > 10}
+                                                                <tr class="more-row">
+                                                                    <td colspan={isBimToolConnected ? "8" : "7"}>... {specReport.applicable_entities.length - 10} more failing elements not shown ...</td>
+                                                                </tr>
+                                                            {/if}
+                                                        </tbody>
+                                                    </table>
+                                                </Tooltip.Provider>
+                                            </div>
+                                        </div>
+                                    {/if}
+                                {/if}
+                            {/if}
 
                             <!-- Requirements Section -->
                             <div class="facet-section">
@@ -822,6 +890,32 @@
         padding: 6px 10px;
         background: #ffffff08;
         border-radius: 6px;
+    }
+
+    .cardinality-badge {
+        display: inline-block;
+        margin: 8px 8px 0 0;
+        padding: 4px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .cardinality-badge.required {
+        background: #10b98122;
+        color: #10b981;
+    }
+
+    .cardinality-badge.optional {
+        background: #8b8d8f22;
+        color: #8b8d8f;
+    }
+
+    .cardinality-badge.prohibited {
+        background: #ef444422;
+        color: #ef4444;
     }
 
     .spec-actions {

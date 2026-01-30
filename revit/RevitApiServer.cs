@@ -248,12 +248,13 @@ public class SelectElementByGuidEventHandler : IExternalEventHandler
                     try
                     {
                         // Check IfcGUID parameter (built-in parameter)
+                        // Note: IFC GUIDs use Base64 encoding and are CASE-SENSITIVE
                         var ifcGuidParam = element.get_Parameter(BuiltInParameter.IFC_GUID);
                         if (ifcGuidParam != null && ifcGuidParam.HasValue)
                         {
                             var guidValue = ifcGuidParam.AsString();
                             if (!string.IsNullOrEmpty(guidValue) && 
-                                string.Equals(guidValue, IfcGuid, StringComparison.OrdinalIgnoreCase))
+                                string.Equals(guidValue, IfcGuid, StringComparison.Ordinal))
                             {
                                 foundElement = element;
                                 break;
@@ -261,6 +262,7 @@ public class SelectElementByGuidEventHandler : IExternalEventHandler
                         }
                         
                         // Check if there's a shared parameter called "IfcGUID" or "GlobalId"
+                        // Note: Parameter names can be case-insensitive, but GUID values must be case-sensitive
                         foreach (Parameter param in element.Parameters)
                         {
                             if (param != null && param.HasValue)
@@ -271,7 +273,7 @@ public class SelectElementByGuidEventHandler : IExternalEventHandler
                                 {
                                     var guidValue = param.AsString();
                                     if (!string.IsNullOrEmpty(guidValue) && 
-                                        string.Equals(guidValue, IfcGuid, StringComparison.OrdinalIgnoreCase))
+                                        string.Equals(guidValue, IfcGuid, StringComparison.Ordinal))
                                     {
                                         foundElement = element;
                                         break;
@@ -983,6 +985,32 @@ public class RevitApiServer : IDisposable
     private ExportIfcEventHandler? _eventHandlerExportIfc;
     private bool _configsLoaded = false;
     private readonly object _configsLock = new object();
+    
+    // Export job tracking for async polling
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ExportJob> _exportJobs = new();
+    
+    /// <summary>
+    /// Export job status
+    /// </summary>
+    private enum ExportJobStatus
+    {
+        Running,
+        Complete,
+        Failed
+    }
+    
+    /// <summary>
+    /// Export job tracking class
+    /// </summary>
+    private class ExportJob
+    {
+        public string JobId { get; set; } = "";
+        public string ConfigurationName { get; set; } = "";
+        public ExportJobStatus Status { get; set; } = ExportJobStatus.Running;
+        public string? OutputFilePath { get; set; }
+        public string? ErrorMessage { get; set; }
+        public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    }
 
     public RevitApiServer(int port = 48881)
     {
@@ -1131,6 +1159,16 @@ public class RevitApiServer : IDisposable
             {
                 await HandleExportIfc(request, response);
             }
+            else if (path.StartsWith("/export-status/") && method == "GET")
+            {
+                var jobId = path.Replace("/export-status/", "");
+                await HandleExportStatus(response, jobId);
+            }
+            else if (path.StartsWith("/export-file/") && method == "GET")
+            {
+                var jobId = path.Replace("/export-file/", "");
+                await HandleExportFile(response, jobId);
+            }
             else
             {
                 await SendError(response, 404, "Not Found");
@@ -1239,7 +1277,7 @@ public class RevitApiServer : IDisposable
             status = configsReady ? "ok" : "initializing",
             connected = true,
             configsReady = configsReady,
-            version = "1.0.0"
+            version = "1.1.0"
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(status);
@@ -1420,71 +1458,149 @@ public class RevitApiServer : IDisposable
 
             var configName = requestData["configuration"];
             
-            var tcs = new TaskCompletionSource<bool>();
-            _eventHandlerExportIfc.ConfigurationName = configName;
-            _eventHandlerExportIfc.CompletionSource = tcs;
-            _externalEventExportIfc.Raise();
-
-            var completed = await Task.WhenAny(tcs.Task, Task.Delay(60000)); // 60 second timeout for export
+            // Generate unique job ID and create job entry
+            var jobId = Guid.NewGuid().ToString();
+            var job = new ExportJob
+            {
+                JobId = jobId,
+                ConfigurationName = configName,
+                Status = ExportJobStatus.Running
+            };
+            _exportJobs[jobId] = job;
             
-            if (completed == tcs.Task && await tcs.Task && !string.IsNullOrEmpty(_eventHandlerExportIfc.OutputFilePath))
+            // Start export asynchronously (fire and forget with job tracking)
+            _ = Task.Run(async () =>
             {
-                // Read the exported file and send it back
-                if (File.Exists(_eventHandlerExportIfc.OutputFilePath))
+                try
                 {
-                    var fileBytes = await File.ReadAllBytesAsync(_eventHandlerExportIfc.OutputFilePath);
-                    var fileName = Path.GetFileName(_eventHandlerExportIfc.OutputFilePath);
+                    var tcs = new TaskCompletionSource<bool>();
+                    _eventHandlerExportIfc.ConfigurationName = configName;
+                    _eventHandlerExportIfc.CompletionSource = tcs;
+                    _externalEventExportIfc.Raise();
+
+                    // Wait for export to complete (no timeout since we're polling)
+                    var success = await tcs.Task;
                     
-                    response.ContentType = "application/octet-stream";
-                    response.AddHeader("Content-Disposition", $"attachment; filename=\"{fileName}\"");
-                    response.StatusCode = 200;
-                    response.ContentLength64 = fileBytes.Length;
-                    
-                    await response.OutputStream.WriteAsync(fileBytes, 0, fileBytes.Length);
-                    
-                    // Clean up temporary file
-                    try
+                    if (success && !string.IsNullOrEmpty(_eventHandlerExportIfc.OutputFilePath) && 
+                        File.Exists(_eventHandlerExportIfc.OutputFilePath))
                     {
-                        File.Delete(_eventHandlerExportIfc.OutputFilePath);
+                        job.Status = ExportJobStatus.Complete;
+                        job.OutputFilePath = _eventHandlerExportIfc.OutputFilePath;
+                        System.Diagnostics.Debug.WriteLine($"Export job {jobId} completed: {job.OutputFilePath}");
                     }
-                    catch
+                    else
                     {
-                        // Ignore cleanup errors
+                        job.Status = ExportJobStatus.Failed;
+                        job.ErrorMessage = "IFC export failed or file was not created";
+                        System.Diagnostics.Debug.WriteLine($"Export job {jobId} failed");
                     }
                 }
-                else
+                catch (Exception ex)
                 {
-                    await SendError(response, 500, "IFC file was not created");
+                    job.Status = ExportJobStatus.Failed;
+                    job.ErrorMessage = ex.Message;
+                    System.Diagnostics.Debug.WriteLine($"Export job {jobId} exception: {ex.Message}");
                 }
-            }
-            else
-            {
-                var errorDetails = "Unknown error";
-                if (_eventHandlerExportIfc.OutputFilePath == null)
-                {
-                    errorDetails = "Export handler did not set output file path";
-                }
-                else if (!File.Exists(_eventHandlerExportIfc.OutputFilePath))
-                {
-                    errorDetails = $"File was not created at: {_eventHandlerExportIfc.OutputFilePath}";
-                }
-                else
-                {
-                    errorDetails = "Export handler returned false";
-                }
-                
-                System.Diagnostics.Debug.WriteLine($"IFC export failed: {errorDetails}");
-                await SendError(response, 500, $"Failed to export IFC: {errorDetails}");
-            }
+            });
+            
+            // Return immediately with job ID
+            var result = new { jobId = jobId, status = "running" };
+            var json = System.Text.Json.JsonSerializer.Serialize(result);
+            response.StatusCode = 200;
+            response.ContentType = "application/json";
+            var buffer = Encoding.UTF8.GetBytes(json);
+            response.ContentLength64 = buffer.Length;
+            await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
         }
         catch (Exception ex)
         {
             System.Diagnostics.Debug.WriteLine($"HandleExportIfc exception: {ex.Message}\n{ex.StackTrace}");
-            if (ex.InnerException != null)
+            await SendError(response, 500, $"Failed to start IFC export: {ex.Message}");
+        }
+    }
+    
+    private async Task HandleExportStatus(HttpListenerResponse response, string jobId)
+    {
+        if (!_exportJobs.TryGetValue(jobId, out var job))
+        {
+            await SendError(response, 404, "Job not found");
+            return;
+        }
+        
+        var statusStr = job.Status switch
+        {
+            ExportJobStatus.Running => "running",
+            ExportJobStatus.Complete => "complete",
+            ExportJobStatus.Failed => "failed",
+            _ => "unknown"
+        };
+        
+        object result;
+        if (job.Status == ExportJobStatus.Failed)
+        {
+            result = new { jobId = job.JobId, status = statusStr, error = job.ErrorMessage ?? "Unknown error" };
+        }
+        else
+        {
+            result = new { jobId = job.JobId, status = statusStr };
+        }
+        
+        var json = System.Text.Json.JsonSerializer.Serialize(result);
+        response.StatusCode = 200;
+        response.ContentType = "application/json";
+        var buffer = Encoding.UTF8.GetBytes(json);
+        response.ContentLength64 = buffer.Length;
+        await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
+    }
+    
+    private async Task HandleExportFile(HttpListenerResponse response, string jobId)
+    {
+        if (!_exportJobs.TryGetValue(jobId, out var job))
+        {
+            await SendError(response, 404, "Job not found");
+            return;
+        }
+        
+        if (job.Status != ExportJobStatus.Complete)
+        {
+            await SendError(response, 400, "Export not yet complete");
+            return;
+        }
+        
+        if (string.IsNullOrEmpty(job.OutputFilePath) || !File.Exists(job.OutputFilePath))
+        {
+            await SendError(response, 500, "Export file not found");
+            return;
+        }
+        
+        try
+        {
+            var fileBytes = await File.ReadAllBytesAsync(job.OutputFilePath);
+            var fileName = Path.GetFileName(job.OutputFilePath);
+            
+            response.ContentType = "application/octet-stream";
+            response.AddHeader("Content-Disposition", $"attachment; filename=\"{fileName}\"");
+            response.StatusCode = 200;
+            response.ContentLength64 = fileBytes.Length;
+            
+            await response.OutputStream.WriteAsync(fileBytes, 0, fileBytes.Length);
+            
+            // Clean up: delete temp file and remove job from tracking
+            try
             {
-                System.Diagnostics.Debug.WriteLine($"Inner exception: {ex.InnerException.Message}");
+                File.Delete(job.OutputFilePath);
             }
-            await SendError(response, 500, $"Failed to export IFC: {ex.Message}");
+            catch
+            {
+                // Ignore cleanup errors
+            }
+            
+            _exportJobs.TryRemove(jobId, out _);
+            System.Diagnostics.Debug.WriteLine($"Export job {jobId} file delivered and cleaned up");
+        }
+        catch (Exception ex)
+        {
+            await SendError(response, 500, $"Failed to read export file: {ex.Message}");
         }
     }
 

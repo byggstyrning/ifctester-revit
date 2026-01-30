@@ -34,7 +34,7 @@ constexpr short BrowserId               = 1;
 constexpr int ApiServerPort             = 48882; // Different port from Revit (48881)
 
 // Add-On Version (update this when making significant changes)
-constexpr const char* AddOnVersion       = "1.0.0";
+constexpr const char* AddOnVersion       = "1.1.0";
 constexpr const char* BuildDate          = __DATE__;
 constexpr const char* BuildTime          = __TIME__;
 
@@ -71,6 +71,6 @@ GS::Array<ElementInfo> GetSelectedElements();
 bool SelectElementByGUID(const GS::UniString& guidStr);
 bool SelectElementByID(const API_Guid& guid);
 GS::Array<IFCConfiguration> GetIFCExportConfigurations();
-bool ExportToIFC(const GS::UniString& configName, GS::UniString& outputPath);
+bool ExportToIFC(const GS::UniString& configName, GS::UniString& outputPath, GS::UniString* errorMessage = nullptr);
 
 #endif // IFCTESTER_ARCHICAD_HPP

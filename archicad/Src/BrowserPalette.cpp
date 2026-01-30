@@ -4,7 +4,7 @@
  * Browser Palette Implementation
  * Implements the dockable palette with browser control for the IfcTester web interface.
  * 
- * Compatible with ArchiCAD 27
+ * Compatible with ArchiCAD 29
  */
 
 #include "BrowserPalette.hpp"
@@ -40,18 +40,21 @@ BrowserPalette::BrowserPalette() :
     InitBrowserControl();
     
     // Register with ArchiCAD palette management
+    // Use GS::CalculateHashValue pattern from official AC29 Browser_Control example
     if (!paletteRegistered) {
         GSFlags controlFlags = API_PalEnabled_FloorPlan | API_PalEnabled_Section | API_PalEnabled_Detail | 
-                               API_PalEnabled_Worksheet | API_PalEnabled_Layout | API_PalEnabled_3D;
+                               API_PalEnabled_Worksheet | API_PalEnabled_Layout | API_PalEnabled_3D |
+                               API_PalEnabled_Elevation | API_PalEnabled_InteriorElevation | 
+                               API_PalEnabled_DocumentFrom3D;
         API_Guid apiPaletteGuid = GSGuid2APIGuid(paletteGuid);
         ACAPI_RegisterModelessWindow(
-            GetId(),
+            GS::CalculateHashValue(paletteGuid),
             PaletteControlCallback,
             controlFlags,
             apiPaletteGuid
         );
         
-        registeredPaletteId = GetId();
+        registeredPaletteId = GS::CalculateHashValue(paletteGuid);
         paletteRegistered = true;
     }
 }
@@ -87,7 +90,7 @@ BrowserPalette* BrowserPalette::GetInstance()
 // Static Handlers
 // ============================================================================
 
-GSErrCode __ACENV_CALL BrowserPalette::SelectionChangeHandler(const API_Neig* /*selElemNeig*/)
+GSErrCode BrowserPalette::SelectionChangeHandler (const API_Neig* /*selElemNeig*/)
 {
     // Update the web interface when selection changes
     if (instance != nullptr && instance->IsVisible()) {
@@ -103,7 +106,7 @@ GSErrCode BrowserPalette::RegisterPaletteControlCallBack()
     return NoError;
 }
 
-GSErrCode __ACENV_CALL BrowserPalette::PaletteControlCallback(Int32 paletteId, API_PaletteMessageID messageID, GS::IntPtr param)
+GSErrCode BrowserPalette::PaletteControlCallback (Int32 paletteId, API_PaletteMessageID messageID, GS::IntPtr param)
 {
     UNUSED_PARAMETER(paletteId);
     
@@ -247,7 +250,7 @@ void BrowserPalette::RegisterACAPIJavaScriptObject()
         GS::Ref<JS::Object> status = new JS::Object("status");
         status->AddItem("connected", GS::Ref<JS::Base>(new JS::Value(true)));
         status->AddItem("port", GS::Ref<JS::Base>(new JS::Value((Int32)ApiServerPort)));
-        status->AddItem("version", GS::Ref<JS::Base>(new JS::Value("1.0.0")));
+        status->AddItem("version", GS::Ref<JS::Base>(new JS::Value("1.1.0")));
         return GS::Ref<JS::Base>(status);
     })));
     

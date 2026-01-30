@@ -32,7 +32,7 @@ static const wchar_t* MESSAGE_WINDOW_CLASS = L"IfcTesterMessageWindow";
 
 /**
  * Window procedure for the hidden message window
- * Handles WM_IFCTESTER_PROCESS_QUEUE messages from background threads
+ * Handles WM_IFCTESTER_PROCESS_QUEUE and WM_IFCTESTER_PROCESS_EXPORT messages from background threads
  */
 LRESULT CALLBACK MessageWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -42,6 +42,14 @@ LRESULT CALLBACK MessageWindowProc(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lP
             if (gApiServer != nullptr) {
                 ACAPI_WriteReport("IfcTester: Processing selection queue on main thread", false);
                 gApiServer->ProcessSelectionQueue();
+            }
+            return 0;
+            
+        case IfcTester::WM_IFCTESTER_PROCESS_EXPORT:
+            // Process export queue on the main thread
+            if (gApiServer != nullptr) {
+                ACAPI_WriteReport("IfcTester: Processing export queue on main thread", false);
+                gApiServer->ProcessExportQueue();
             }
             return 0;
             
@@ -117,7 +125,7 @@ void DestroyMessageWindow()
  * Menu command handler
  * Called when user selects a menu item
  */
-GSErrCode __ACENV_CALL MenuCommandHandler(const API_MenuParams* menuParams)
+GSErrCode MenuCommandHandler (const API_MenuParams *menuParams)
 {
     switch (menuParams->menuItemRef.menuResID) {
         case BrowserPaletteMenuResId:
@@ -215,6 +223,7 @@ bool SelectElementByGUID(const GS::UniString& guidStr)
     }
     
     // Try to find by IFC GlobalId first (matches IFC_Test example pattern)
+    // Note: IFC GUIDs are case-sensitive (Base64 encoding)
     try {
         IFCAPI::IfcGloballyUniqueId globalId = guidStr;
         auto elementsResult = IFCAPI::GetObjectAccessor().FindElementsByGlobalId(globalId);
@@ -304,92 +313,240 @@ GS::Array<IFCConfiguration> GetIFCExportConfigurations()
 {
     GS::Array<IFCConfiguration> configurations;
     
-    // Standard IFC configurations in ArchiCAD
-    // Note: ArchiCAD provides these through the IFC Translator settings
+    // Get actual translator configurations from ArchiCAD
+    GS::Array<API_IFCTranslatorIdentifier> ifcTranslators;
+    GSErrCode err = ACAPI_IFC_GetIFCExportTranslatorsList(ifcTranslators);
     
-    IFCConfiguration config2x3;
-    config2x3.name = "IFC 2x3";
-    config2x3.description = "IFC 2x3 Coordination View 2.0";
-    config2x3.version = "IFC2x3";
-    configurations.Push(config2x3);
+    if (err == NoError) {
+        for (const auto& translator : ifcTranslators) {
+            IFCConfiguration config;
+            config.name = translator.name;
+            config.description = translator.name; // Description not available in identifier
+            config.version = "IFC"; // Version not available in identifier
+            configurations.Push(config);
+        }
+    }
     
-    IFCConfiguration config4;
-    config4.name = "IFC 4";
-    config4.description = "IFC 4 Reference View";
-    config4.version = "IFC4";
-    configurations.Push(config4);
-    
-    IFCConfiguration config4DTV;
-    config4DTV.name = "IFC 4 Design Transfer";
-    config4DTV.description = "IFC 4 Design Transfer View";
-    config4DTV.version = "IFC4";
-    configurations.Push(config4DTV);
-    
-    // Try to get actual translator configurations from ArchiCAD
-    // This requires accessing the IFC Translator settings
-    API_Attribute attrib;
-    BNZeroMemory(&attrib, sizeof(API_Attribute));
-    
-    // Enumerate available IFC translators
-    // Note: Actual implementation depends on ArchiCAD version
-    // For now, we return the standard configurations
+    // If no translators found (or error), add a default fallback
+    if (configurations.IsEmpty()) {
+        IFCConfiguration configDefault;
+        configDefault.name = "Default (Preview)";
+        configDefault.description = "Default IFC Translator";
+        configDefault.version = "IFC";
+        configurations.Push(configDefault);
+    }
     
     return configurations;
 }
 
 /**
  * Export model to IFC
- * Note: Full IFC export implementation requires complex setup with translators
- * For IfcTester, users typically load pre-exported IFC files
  */
-bool ExportToIFC(const GS::UniString& configName, GS::UniString& outputPath)
+bool ExportToIFC(const GS::UniString& configName, GS::UniString& outputPath, GS::UniString* errorMessage)
 {
-    UNUSED_PARAMETER(configName);
+    // CRITICAL: Check Demo Mode IMMEDIATELY, before any other operations
+    // This must be the VERY FIRST thing in the function to prevent any possibility
+    // of the save operation being called in Demo Mode
+    // Call the API function directly in the condition to ensure it's evaluated immediately
+    UInt32 protectionMode = ACAPI_Licensing_GetProtectionMode();
     
-    // Create temporary output path
-    IO::Location tempFolder;
-    API_SpecFolderID specFolderID = API_TemporaryFolderID;
-    
-    GSErrCode err = ACAPI_ProjectSettings_GetSpecFolder(&specFolderID, &tempFolder);
-    if (err != NoError) {
+    // CRITICAL: Check Demo Mode IMMEDIATELY, before any other operations
+    // This must be the VERY FIRST thing in the function to prevent any possibility
+    // of the save operation being called in Demo Mode
+    // Call the API function directly in the condition to ensure it's evaluated immediately
+    if ((ACAPI_Licensing_GetProtectionMode() & APIPROT_DEMO_MASK) != 0) {
+        GS::UniString msg = "Cannot export IFC in Demo Mode";
+        if (errorMessage) {
+            *errorMessage = msg;
+        }
         return false;
     }
     
-    // Generate unique filename
-    GS::UniString timestamp = GS::UniString::Printf("IfcTester_Export_%lld", 
-        (long long)std::time(nullptr));
-    GS::UniString filename = timestamp + ".ifc";
+    try {
+        // Debug logging for protection mode
+        ACAPI_WriteReport("IfcTester: ExportToIFC called - checking protection mode...", false);
+        UInt32 protectionMode = ACAPI_Licensing_GetProtectionMode();
+        ACAPI_WriteReport("IfcTester: Protection Mode value: %u (Hex: 0x%X)", false, protectionMode, protectionMode);
+        ACAPI_WriteReport("IfcTester: APIPROT_DEMO_MASK value: 0x%X", false, APIPROT_DEMO_MASK);
+        UInt32 demoCheck = protectionMode & APIPROT_DEMO_MASK;
+        ACAPI_WriteReport("IfcTester: Demo Mode check result: %u (0x%X) - %s", false, demoCheck, demoCheck, (demoCheck != 0) ? "DEMO MODE DETECTED" : "NOT DEMO MODE");
+        
+        // Double-check (should never hit this if first check worked)
+        if (protectionMode & APIPROT_DEMO_MASK) {
+            GS::UniString msg = "Cannot export IFC in Demo Mode";
+            if (errorMessage) {
+                *errorMessage = msg;
+            }
+            return false;
+        }
+        
+        ACAPI_WriteReport("IfcTester: Protection mode check passed, continuing with export...", false);
+
+        ACAPI_WriteReport("IfcTester: Starting IFC export...", false);
+
+        // Create temporary output path
+        ACAPI_WriteReport("IfcTester: Getting temporary folder...", false);
+        IO::Location tempFolder;
+        API_SpecFolderID specFolderID = API_TemporaryFolderID;
+        
+        GSErrCode err = ACAPI_ProjectSettings_GetSpecFolder(&specFolderID, &tempFolder);
+        if (err != NoError) {
+            ACAPI_WriteReport("IfcTester: Failed to get temporary folder (error %d)", false, err);
+            if (errorMessage) *errorMessage = "Failed to get temporary folder";
+            return false;
+        }
+        ACAPI_WriteReport("IfcTester: Temporary folder obtained", false);
+        
+        // Generate unique filename
+        GS::UniString timestamp = GS::UniString::Printf("IfcTester_Export_%lld", 
+            (long long)std::time(nullptr));
+        GS::UniString filename = timestamp + ".ifc";
+        
+        IO::Location outputLocation(tempFolder);
+        outputLocation.AppendToLocal(IO::Name(filename));
+        
+        // Get IFC translators
+        ACAPI_WriteReport("IfcTester: Getting IFC translators list...", false);
+        GS::Array<API_IFCTranslatorIdentifier> ifcTranslators;
+        err = ACAPI_IFC_GetIFCExportTranslatorsList(ifcTranslators);
+        if (err != NoError || ifcTranslators.IsEmpty()) {
+            ACAPI_WriteReport("IfcTester: No IFC translators found (error %d)", false, err);
+            if (errorMessage) *errorMessage = "No IFC translators found";
+            return false;
+        }
+        ACAPI_WriteReport("IfcTester: Found %d IFC translator(s)", false, ifcTranslators.GetSize());
+        
+        // Find the requested translator
+        API_IFCTranslatorIdentifier translator = ifcTranslators[0]; // Default to first
+        bool found = false;
+        
+        // If configName is provided, look for it
+        if (!configName.IsEmpty() && configName != "Default (Preview)") {
+            for (const auto& tr : ifcTranslators) {
+                if (tr.name == configName) {
+                    translator = tr;
+                    found = true;
+                    break;
+                }
+            }
+            
+            if (!found) {
+                ACAPI_WriteReport("IfcTester: Warning - Translator '%s' not found, using default '%s'", 
+                    false, configName.ToCStr().Get(), translator.name.ToCStr().Get());
+            } else {
+                 ACAPI_WriteReport("IfcTester: Using translator '%s'", false, translator.name.ToCStr().Get());
+            }
+        } else {
+            ACAPI_WriteReport("IfcTester: Using default translator '%s'", false, translator.name.ToCStr().Get());
+        }
     
-    IO::Location outputLocation(tempFolder);
-    outputLocation.AppendToLocal(IO::Name(filename));
-    
-    // Get IFC translators
-    GS::Array<API_IFCTranslatorIdentifier> ifcTranslators;
-    err = ACAPI_IFC_GetIFCExportTranslatorsList(ifcTranslators);
-    if (err != NoError || ifcTranslators.IsEmpty()) {
-        return false;
-    }
-    
-    // Use the first available translator (usually the preview translator)
-    API_IFCTranslatorIdentifier& translator = ifcTranslators[0];
-    
-    // Set up file save parameters
-    API_FileSavePars fileSavePars = {};
-    fileSavePars.file = &outputLocation;
-    
-    // Set up IFC save parameters
-    API_SavePars_Ifc ifcSavePars = {};
-    ifcSavePars.translatorIdentifier = translator;
-    
-    // Perform export
-    err = ACAPI_ProjectOperation_Save(&fileSavePars, &ifcSavePars, nullptr);
-    
-    if (err == NoError) {
+        // Double-check Demo Mode right before save operation
+        protectionMode = ACAPI_Licensing_GetProtectionMode();
+        if (protectionMode & APIPROT_DEMO_MASK) {
+            GS::UniString msg = "Cannot export IFC in Demo Mode";
+            if (errorMessage) {
+                *errorMessage = msg;
+            }
+            return false;
+        }
+        
+        // Set up file save parameters
+        ACAPI_WriteReport("IfcTester: Setting up file save parameters...", false);
+        API_FileSavePars fileSavePars = {};
+        fileSavePars.file = &outputLocation;
+        fileSavePars.fileTypeID = APIFType_IfcFile;
+        
+        // Set up IFC save parameters
+        API_SavePars_Ifc ifcSavePars = {};
+        ifcSavePars.translatorIdentifier = translator;
+        
+        // FINAL SAFETY CHECK - Do not call ACAPI_ProjectOperation_Save in Demo Mode
+        // The assertion failure happens INSIDE the save call, so we must prevent calling it
+        protectionMode = ACAPI_Licensing_GetProtectionMode();
+        ACAPI_WriteReport("IfcTester: Final protection mode check before save: %u (0x%X)", false, protectionMode, protectionMode);
+        if (protectionMode & APIPROT_DEMO_MASK) {
+            GS::UniString msg = "Cannot export IFC in Demo Mode";
+            if (errorMessage) {
+                *errorMessage = msg;
+            }
+            return false;
+        }
+        
+        // Perform export
+        ACAPI_WriteReport("IfcTester: Calling ACAPI_ProjectOperation_Save...", false);
+        
+        // Wrap the save call in additional protection
+        // Some error codes from ACAPI_ProjectOperation_Save might trigger assertions
+        err = ACAPI_ProjectOperation_Save(&fileSavePars, &ifcSavePars, nullptr);
+        
+        // Check for specific error codes that indicate Demo Mode restrictions
+        // According to ACAPI_Automate.h documentation:
+        // - APIERR_REFUSEDCMD is returned when "you are running a demo version of Archicad"
+        // - Error -2130312312 (0x81000088) also appears to be a Demo Mode restriction
+        if (err != NoError) {
+            ACAPI_WriteReport("IfcTester: ACAPI_ProjectOperation_Save returned error %d (0x%X)", false, err, (unsigned int)err);
+            
+            // DIRECT CHECK: If error code is -2130312312, treat as Demo Mode immediately
+            if (err == -2130312312) {
+                GS::UniString msg = "Cannot export IFC in Demo Mode";
+                if (errorMessage) {
+                    *errorMessage = msg;
+                }
+                return false;
+            }
+            
+            // Explicit checks for Demo Mode error codes
+            // Error code -2130312312 (0x81000088) is the Demo Mode restriction error
+            const GSErrCode DEMO_MODE_ERROR_CODE = -2130312312;
+            const UInt32 DEMO_MODE_ERROR_HEX = 0x81000088;
+            
+            bool isRefusedCmd = (err == APIERR_REFUSEDCMD);
+            bool isDemoErrorCode = (err == DEMO_MODE_ERROR_CODE);
+            bool isDemoErrorHex = ((UInt32)err == DEMO_MODE_ERROR_HEX);
+            bool isDemoMode = (protectionMode & APIPROT_DEMO_MASK) != 0;
+            
+            ACAPI_WriteReport("IfcTester: Error check - APIERR_REFUSEDCMD: %s, Demo error code (dec): %s, Demo error code (hex): %s, Demo mode bit: %s", 
+                false, isRefusedCmd ? "YES" : "NO", isDemoErrorCode ? "YES" : "NO", isDemoErrorHex ? "YES" : "NO", isDemoMode ? "YES" : "NO");
+            
+            // Check if this is a Demo Mode related error
+            // APIERR_REFUSEDCMD is the documented error code for Demo Mode restrictions
+            // Error code -2130312312 (0x81000088) is also seen in Demo Mode
+            if (isRefusedCmd || isDemoErrorCode || isDemoErrorHex || isDemoMode) {
+                GS::UniString msg = "Cannot export IFC in Demo Mode";
+                if (errorMessage) {
+                    *errorMessage = msg;
+                }
+                return false;
+            }
+            
+            // Other errors
+            ACAPI_WriteReport("IfcTester: Failed to export IFC (error %d) - not a Demo Mode error", false, err);
+            if (errorMessage) {
+                *errorMessage = GS::UniString::Printf("Failed to export IFC (error %d)", err);
+            }
+            return false;
+        }
+        
+        // Success path
+        ACAPI_WriteReport("IfcTester: ACAPI_ProjectOperation_Save succeeded", false);
         outputLocation.ToPath(&outputPath);
+        ACAPI_WriteReport("IfcTester: Successfully exported IFC to: %s", false, outputPath.ToCStr().Get());
         return true;
+        
+        return false;
+    } catch (const std::exception& e) {
+        ACAPI_WriteReport("IfcTester: Exception in ExportToIFC: %s", true, e.what());
+        if (errorMessage) {
+            *errorMessage = GS::UniString::Printf("Exception: %s", e.what());
+        }
+        return false;
+    } catch (...) {
+        ACAPI_WriteReport("IfcTester: Unknown exception in ExportToIFC", true);
+        if (errorMessage) {
+            *errorMessage = "Unknown exception occurred during IFC export";
+        }
+        return false;
     }
-    
-    return false;
 }
 
 // ============================================================================
@@ -400,7 +557,7 @@ bool ExportToIFC(const GS::UniString& configName, GS::UniString& outputPath)
  * CheckEnvironment
  * Called when ArchiCAD starts to check if the Add-On can run
  */
-API_AddonType __ACDLL_CALL CheckEnvironment(API_EnvirParams* envir)
+API_AddonType CheckEnvironment (API_EnvirParams* envir)
 {
     RSGetIndString(&envir->addOnInfo.name, AddOnInfoResId, 1, ACAPI_GetOwnResModule());
     RSGetIndString(&envir->addOnInfo.description, AddOnInfoResId, 2, ACAPI_GetOwnResModule());
@@ -412,7 +569,7 @@ API_AddonType __ACDLL_CALL CheckEnvironment(API_EnvirParams* envir)
  * RegisterInterface
  * Called to register menus, dialogs, and other UI elements
  */
-GSErrCode __ACDLL_CALL RegisterInterface(void)
+GSErrCode RegisterInterface (void)
 {
     // Register the menu
     GSErrCode err = ACAPI_MenuItem_RegisterMenu(BrowserPaletteMenuResId, 0, MenuCode_UserDef, MenuFlag_Default);
@@ -427,7 +584,7 @@ GSErrCode __ACDLL_CALL RegisterInterface(void)
  * Initialize
  * Called when the Add-On is loaded
  */
-GSErrCode __ACENV_CALL Initialize(void)
+GSErrCode Initialize (void)
 {
     // Install menu handler
     GSErrCode err = ACAPI_MenuItem_InstallMenuHandler(BrowserPaletteMenuResId, MenuCommandHandler);
@@ -543,7 +700,7 @@ GSErrCode __ACENV_CALL Initialize(void)
  * FreeData
  * Called when the Add-On is unloaded
  */
-GSErrCode __ACENV_CALL FreeData(void)
+GSErrCode FreeData (void)
 {
     // Stop and clean up API server first (before destroying message window)
     if (gApiServer != nullptr) {

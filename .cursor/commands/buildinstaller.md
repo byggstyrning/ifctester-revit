@@ -1,109 +1,136 @@
 # Build Installer Command Guide
 
 ## Purpose
-This command instructs Cursor to run the installer build script for the IfcTester Revit Plugin project, creating a Windows installer using Inno Setup.
+This command instructs Cursor to build Windows installers for the IfcTester plugins (Revit and ArchiCAD).
 
 ## When to Use
 Run this command when you need to:
-- Build a Windows installer (.exe) for distribution to users
-- Create Release builds for both Revit 2025 and 2026
-- Package the plugin and web app into a single installer
-- Generate a signed installer with a code-signing certificate
+- Build Windows installers (.exe) for distribution to users
+- Create Release builds for Revit 2025/2026 and ArchiCAD 29
+- Package the plugins and web app into installers
 
-## How to Execute
+## Quick Reference
 
-### Basic Usage
-When the user requests to build the installer, run the PowerShell script located at:
+### Build Both Installers
+```powershell
+# Set ArchiCAD API path first
+$env:ARCHICAD_API_DEVKIT = "C:\code\archicad-api\API.Development.Kit.WIN.29.3100"
+
+# Build Revit installer
+& "C:\code\ifctester-revit\scripts\build-installer.ps1" -SkipCertificate
+
+# Build ArchiCAD installer  
+& "C:\code\ifctester-revit\scripts\build-archicad-installer.ps1"
 ```
-C:\code\ifctester-revit\scripts\build-installer.ps1
-```
 
-### Command
+### Build Revit Only
 ```powershell
 & "C:\code\ifctester-revit\scripts\build-installer.ps1"
 ```
 
-### With Parameters
-The script accepts the following parameters:
-
-1. **SkipBuild** (optional flag)
-   Skip building the plugin and web app (use existing builds)
-   ```powershell
-   & "C:\code\ifctester-revit\scripts\build-installer.ps1" -SkipBuild
-   ```
-
-2. **SkipCertificate** (optional flag)
-   Skip creating/checking the code-signing certificate
-   ```powershell
-   & "C:\code\ifctester-revit\scripts\build-installer.ps1" -SkipCertificate
-   ```
-
-3. **CertificatePassword** (optional, default: "IfcTester2025!")
-   Password for the code-signing certificate
-   ```powershell
-   & "C:\code\ifctester-revit\scripts\build-installer.ps1" -CertificatePassword "YourPassword"
-   ```
-
-## What the Script Does
-
-1. Checks for code-signing certificate (creates if missing, unless `-SkipCertificate`)
-2. Builds the web application using npm
-3. Builds the Revit plugin for R25 (Release configuration)
-4. Builds the Revit plugin for R26 (Release configuration)
-5. Prepares staging directory with all plugin files and web app
-6. Generates version-specific `.addin` files for R25 and R26
-7. Compiles the installer using Inno Setup
-8. Signs the installer with the code-signing certificate (if available)
-9. Outputs the final installer to `dist\IfcTesterRevit-Setup-v1.0.0.exe`
+### Build ArchiCAD Only
+```powershell
+$env:ARCHICAD_API_DEVKIT = "C:\code\archicad-api\API.Development.Kit.WIN.29.3100"
+& "C:\code\ifctester-revit\scripts\build-archicad-installer.ps1"
+```
 
 ## Prerequisites
 
-- **Inno Setup 6** must be installed at: `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`
-- **Windows SDK** (for signtool.exe) - usually installed with Visual Studio
-- **.NET SDK** (for building the plugin)
-- **Node.js and npm** (for building the web app)
+### Common
+- **Inno Setup 6** at `C:\Program Files (x86)\Inno Setup 6\ISCC.exe`
+- **Node.js and npm** for web app build
+
+### Revit
+- **.NET SDK 8.0** for plugin build
+
+### ArchiCAD
+- **Visual Studio 2022** with C++ desktop workload (v143 toolset)
+- **ArchiCAD API DevKit 29** - Set `ARCHICAD_API_DEVKIT` environment variable
+
+## Parameters
+
+### Revit Installer (`build-installer.ps1`)
+| Parameter | Description |
+|-----------|-------------|
+| `-SkipBuild` | Skip building plugin and web app |
+| `-SkipCertificate` | Skip certificate creation/check |
+| `-CertificatePassword` | Password for code-signing certificate |
+
+### ArchiCAD Installer (`build-archicad-installer.ps1`)
+| Parameter | Description |
+|-----------|-------------|
+| `-SkipBuild` | Skip building the add-on |
+| `-SkipWebBuild` | Skip building the web app |
+
+## Common Issue: Revit DLL Locked
+
+**Error**: `Access to path 'IfcTesterRevit.dll' is denied`
+
+**Cause**: Revit is running and has the DLL file locked.
+
+**Solution**: Build without deploying to the locked folder:
+
+```powershell
+# Build Revit plugin without deploying
+Push-Location "C:\code\ifctester-revit\revit"
+dotnet build "IfcTesterRevit.csproj" -c "Release R25" --no-incremental /p:DeployRevitAddin=false
+dotnet publish "IfcTesterRevit.csproj" -c "Release R25" /p:DeployRevitAddin=false
+dotnet build "IfcTesterRevit.csproj" -c "Release R26" --no-incremental /p:DeployRevitAddin=false
+dotnet publish "IfcTesterRevit.csproj" -c "Release R26" /p:DeployRevitAddin=false
+Pop-Location
+
+# Prepare staging directory
+$StagingDir = "C:\code\ifctester-revit\installer\staging"
+if (Test-Path $StagingDir) { Remove-Item $StagingDir -Recurse -Force }
+New-Item -ItemType Directory -Path $StagingDir -Force | Out-Null
+Copy-Item -Path "C:\code\ifctester-revit\revit\bin\Release R25\publish\*" -Destination "$StagingDir\IfcTesterRevit" -Recurse -Force
+Get-ChildItem -Path "$StagingDir\IfcTesterRevit" -Filter "*.addin" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+Copy-Item -Path "C:\code\ifctester-revit\web\dist\*" -Destination "$StagingDir\IfcTesterRevit\web" -Recurse -Force
+
+# Generate .addin files
+$GeneratedDir = "C:\code\ifctester-revit\installer\generated"
+if (-not (Test-Path $GeneratedDir)) { New-Item -ItemType Directory -Path $GeneratedDir -Force | Out-Null }
+$Template = Get-Content "C:\code\ifctester-revit\installer\templates\IfcTesterRevit.addin.template" -Raw
+$Addin = $Template -replace '\{ASSEMBLY_PATH\}', 'IfcTesterRevit\IfcTesterRevit.dll'
+$Addin | Out-File "$GeneratedDir\IfcTesterRevit.2025.addin" -Encoding UTF8 -NoNewline
+$Addin | Out-File "$GeneratedDir\IfcTesterRevit.2026.addin" -Encoding UTF8 -NoNewline
+
+# Run Inno Setup
+& "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/OC:\code\ifctester-revit\dist" "C:\code\ifctester-revit\installer\IfcTesterRevit.iss"
+```
 
 ## Output
 
-The installer will be created at:
-```
-C:\code\ifctester-revit\dist\IfcTesterRevit-Setup-v1.0.0.exe
-```
-
-The installer:
-- Detects installed Revit versions (2025 and/or 2026)
-- Allows user to select which versions to install
-- Installs plugin files to `%APPDATA%\Autodesk\Revit\Addins\{version}\IfcTesterRevit`
-- Includes all dependencies and web app files
-- Creates uninstaller for easy removal
-
-## Notes for Cursor
-
-- Always run this from PowerShell (not cmd)
-- The script stops on any error (`$ErrorActionPreference = "Stop"`)
-- Certificate creation requires administrator privileges
-- The installer is signed with a self-signed certificate (for testing)
-- For production, use a certificate from a trusted Certificate Authority
-- The installer file size is approximately 23-25 MB
+| Installer | Location | Size |
+|-----------|----------|------|
+| Revit | `dist\IfcTesterRevit-Setup-v1.1.0.exe` | ~45 MB |
+| ArchiCAD | `dist\IfcTesterArchiCAD-Setup-v1.1.0.exe` | ~35 MB |
 
 ## Example Usage in Cursor
 
 When a user says:
-- "Build the installer"
-- "Create the Windows installer"
-- "Build the setup file"
-- "Package for distribution"
-- "Make an installer"
+- "Build the installer" / "Build releases" → Build both
+- "Build Revit installer" → Build Revit only
+- "Build ArchiCAD installer" → Build ArchiCAD only
 
-Execute:
-```powershell
-& "C:\code\ifctester-revit\scripts\build-installer.ps1"
-```
+## ArchiCAD Build Requirements
+
+The ArchiCAD 29 API requires specific configuration:
+
+| Requirement | Value |
+|-------------|-------|
+| Platform Toolset | v143 (Visual Studio 2022) |
+| C++ Standard | C++20 (`stdcpp20`) |
+| IFC Libraries | IFCInOutAPIImp.LIB, ArchicadAPIImp.LIB |
+| Include Paths | IFCInOutAPI, ArchicadAPI modules |
 
 ## Troubleshooting
 
-- **Inno Setup not found**: Install Inno Setup 6 from https://jrsoftware.org/isinfo.php
-- **signtool.exe not found**: Install Windows SDK or Visual Studio Build Tools
-- **Certificate errors**: Run PowerShell as Administrator when creating certificate
-- **Build errors**: Ensure all dependencies are installed and paths are correct
-
+| Error | Solution |
+|-------|----------|
+| Inno Setup not found | Install from https://jrsoftware.org/isdl.php |
+| ARCHICAD_API_DEVKIT not set | Set env var to DevKit path |
+| v143 toolset required | Install VS 2022 with C++ workload |
+| C++20 template errors | Ensure `<LanguageStandard>stdcpp20</LanguageStandard>` in vcxproj |
+| IFC unresolved symbols | Add IFCInOutAPI and ArchicadAPI to includes and libs |
+| DLL access denied | Revit is running - use `/p:DeployRevitAddin=false` workaround |

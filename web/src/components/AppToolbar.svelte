@@ -76,6 +76,23 @@
             isLoadingConfigs = false;
         }
     };
+
+    const loadArchiCADIfcConfigurations = async () => {
+        if (!ArchiCAD.connected) return;
+        
+        try {
+            isLoadingConfigs = true;
+            const configs = await getArchiCADIfcConfigurations();
+            ifcConfigurations = configs;
+            if (configs.length > 0 && !selectedIfcConfig) {
+                selectedIfcConfig = configs[0].name;
+            }
+        } catch (err) {
+            console.error('Failed to load ArchiCAD IFC configurations:', err);
+        } finally {
+            isLoadingConfigs = false;
+        }
+    };
     
     const handleExportIfc = async () => {
         if (!selectedIfcConfig) {
@@ -104,6 +121,42 @@
                     } catch (auditErr) {
                         console.error("Auto-audit failed: ", auditErr);
                         // Don't show error toast for audit failure, just log it
+                    }
+                }
+            }
+        } catch (err) {
+            error(`Failed to export IFC: ${err.message}`);
+        } finally {
+            isExportingIfc = false;
+        }
+    };
+
+    const handleExportArchiCADIfc = async () => {
+        if (!selectedIfcConfig) {
+            error('Please select an IFC export configuration');
+            return;
+        }
+        
+        try {
+            isExportingIfc = true;
+            
+            // Clear all existing models before loading the new export
+            await clearAllModels();
+            
+            const exportedFile = await exportArchiCADIfc(selectedIfcConfig);
+            
+            if (exportedFile) {
+                // Automatically load the exported IFC file
+                await loadIfc(exportedFile);
+                success('IFC exported and loaded successfully');
+                
+                // Automatically run audit if IDS document is active
+                if (IDS.Module.activeDocument) {
+                    try {
+                        await runAudit();
+                        success('Audit completed successfully');
+                    } catch (auditErr) {
+                        console.error("Auto-audit failed: ", auditErr);
                     }
                 }
             }
@@ -165,10 +218,12 @@
         return `${size.toFixed(1)} ${units[unitIndex]}`;
     };
     
-    // Load IFC configurations when Revit connects
+    // Load IFC configurations when Revit/ArchiCAD connects or tab changes
     $effect(() => {
-        if (Revit.connected) {
+        if (activeTab === 'revit' && Revit.connected) {
             loadIfcConfigurations();
+        } else if (activeTab === 'archicad' && ArchiCAD.connected) {
+            loadArchiCADIfcConfigurations();
         } else {
             ifcConfigurations = [];
             selectedIfcConfig = '';
@@ -673,6 +728,47 @@
                                     Load IFC Model
                                 {/if}
                             </button>
+                        </div>
+                        
+                        <!-- ArchiCAD Export Section -->
+                        <div class="section">
+                            <h3>Export Active View as IFC</h3>
+                            {#if isLoadingConfigs}
+                                <p class="help-text">Loading configurations...</p>
+                            {:else if ifcConfigurations.length === 0}
+                                <p class="help-text">No IFC export configurations available</p>
+                            {:else}
+                                <div class="export-controls">
+                                    <select 
+                                        class="config-select"
+                                        bind:value={selectedIfcConfig}
+                                        disabled={isExportingIfc}
+                                    >
+                                        {#each ifcConfigurations as config}
+                                            <option value={config.name || config}>{config.name || config}</option>
+                                        {/each}
+                                    </select>
+                                    <button 
+                                        class="export-btn"
+                                        onclick={handleExportArchiCADIfc}
+                                        disabled={isExportingIfc || !selectedIfcConfig}
+                                    >
+                                        {#if isExportingIfc}
+                                            <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                <path d="M21 12a9 9 0 11-6.219-8.56"/>
+                                            </svg>
+                                            Exporting...
+                                        {:else}
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                <polyline points="7 10 12 15 17 10"/>
+                                                <line x1="12" y1="15" x2="12" y2="3"/>
+                                            </svg>
+                                            Export IFC
+                                        {/if}
+                                    </button>
+                                </div>
+                            {/if}
                         </div>
                         
                         {#if IFCModels.models.length > 0}

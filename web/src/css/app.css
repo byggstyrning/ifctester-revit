@@ -527,7 +527,7 @@ html, body {
         .no-document-icon {
             height: 125px;
             width: 200px;
-            background: url(/images/no_document.svg);
+            background: url(/logo.svg);
             background-size: contain;
             background-repeat: no-repeat;
             background-position: center;
@@ -701,6 +701,11 @@ html, body {
             outline: none;
             border-color: #008242;
             box-shadow: 0 0 0 0.2rem #00824254;
+        }
+        .form-input:invalid {
+            outline: 1px;
+            border-color: #f44336;
+            box-shadow: 0 0 0 0.2rem #f4433654;
         }
         .form-input::placeholder {
             color: #888888;

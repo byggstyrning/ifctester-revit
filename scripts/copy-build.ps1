@@ -5,8 +5,8 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
     
-    [ValidateSet("25", "26", "27", "29")]
-    [string]$ArchiCADVersion = "27"
+    [ValidateSet("29")]
+    [string]$ArchiCADVersion = "29"
 )
 
 $ErrorActionPreference = "Stop"
@@ -110,9 +110,10 @@ Write-Host ""
 Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Restart ArchiCAD (if it was running)" -ForegroundColor Gray
 Write-Host "  2. Open Window → Palettes → Report to verify add-on loaded" -ForegroundColor Gray
-Write-Host "  3. Look for: 'IfcTester ArchiCAD Add-On v1.0.0'" -ForegroundColor Gray
+Write-Host "  3. Look for: 'IfcTester ArchiCAD Add-On v1.1.0'" -ForegroundColor Gray
 Write-Host "  4. Look for: 'IfcTester: API server started on http://127.0.0.1:48882'" -ForegroundColor Gray
 Write-Host ""
 Write-Host "To verify the build was copied correctly, run:" -ForegroundColor Cyan
 Write-Host "  .\scripts\verify-build.ps1 -Configuration $Configuration -ArchiCADVersion $ArchiCADVersion" -ForegroundColor Gray
+
 

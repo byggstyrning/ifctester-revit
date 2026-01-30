@@ -1,0 +1,123 @@
+name: Build ArchiCAD Add-On for macOS
+
+on:
+  workflow_dispatch:
+    inputs:
+      archicad_version:
+        description: 'ArchiCAD Version'
+        required: true
+        default: '29'
+        type: choice
+        options:
+          - '29'
+      build_config:
+        description: 'Build Configuration'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - 'Debug'
+          - 'Release'
+  push:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'archicad/**'
+      - 'web/**'
+      - '.github/workflows/build-mac.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'archicad/**'
+      - 'web/**'
+      - '.github/workflows/build-mac.yml'
+
+jobs:
+  build:
+    runs-on: macos-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+      
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+      
+      - name: Install web dependencies
+        run: |
+          cd web
+          npm ci
+      
+      - name: Build web app
+        run: |
+          cd web
+          npm run build
+      
+      - name: Find ArchiCAD DevKit
+        id: find_devkit
+        run: |
+          # Common locations for ArchiCAD API DevKit on macOS
+          POSSIBLE_PATHS=(
+            "$HOME/Library/Application Support/GRAPHISOFT/API Development Kit ${{ github.event.inputs.archicad_version || '29' }}"
+            "/Applications/GRAPHISOFT/API Development Kit ${{ github.event.inputs.archicad_version || '29' }}"
+            "/Users/Shared/GRAPHISOFT/API Development Kit ${{ github.event.inputs.archicad_version || '29' }}"
+          )
+          
+          for path in "${POSSIBLE_PATHS[@]}"; do
+            if [ -f "$path/Support/Inc/ACAPinc.h" ]; then
+              echo "devkit_path=$path" >> $GITHUB_OUTPUT
+              echo "Found DevKit at: $path"
+              exit 0
+            fi
+          done
+          
+          echo "::error::ArchiCAD API DevKit not found. Please install it or set AC_API_DEVKIT_DIR manually."
+          exit 1
+      
+      - name: Configure CMake
+        run: |
+          cd archicad
+          cmake -B cmake-build -S . \
+            -G "Unix Makefiles" \
+            -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_config || 'Release' }} \
+            -DAC_API_DEVKIT_DIR="${{ steps.find_devkit.outputs.devkit_path }}"
+      
+      - name: Build add-on
+        run: |
+          cd archicad
+          cmake --build cmake-build --config ${{ github.event.inputs.build_config || 'Release' }} -j$(sysctl -n hw.ncpu)
+      
+      - name: Verify build output
+        run: |
+          cd archicad
+          BUILD_OUTPUT="cmake-build/${{ github.event.inputs.build_config || 'Release' }}/IfcTesterArchiCAD.bundle"
+          if [ -d "$BUILD_OUTPUT" ]; then
+            echo "✅ Build successful: $BUILD_OUTPUT"
+            ls -lh "$BUILD_OUTPUT"
+          else
+            echo "::error::Build output not found: $BUILD_OUTPUT"
+            exit 1
+          fi
+      
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: IfcTesterArchiCAD-macOS-${{ github.event.inputs.archicad_version || '29' }}-${{ github.event.inputs.build_config || 'Release' }}
+          path: |
+            archicad/cmake-build/${{ github.event.inputs.build_config || 'Release' }}/IfcTesterArchiCAD.bundle
+            archicad/cmake-build/${{ github.event.inputs.build_config || 'Release' }}/WebApp
+          retention-days: 30
+
+

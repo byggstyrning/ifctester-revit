@@ -5,8 +5,8 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
     
-    [ValidateSet("25", "26", "27", "29")]
-    [string]$ArchiCADVersion = "27",
+    [ValidateSet("29")]
+    [string]$ArchiCADVersion = "29",
     
     [switch]$SkipBuild,
     [switch]$SkipCopy,
@@ -88,11 +88,10 @@ if (-not $SkipBuild) {
         $DevKitPath = $env:ARCHICAD_API_DEVKIT
         if (-not $DevKitPath) {
             $PossiblePaths = @(
-                "C:\Program Files\GRAPHISOFT\API Development Kit $ArchiCADVersion",
-                "C:\Program Files (x86)\GRAPHISOFT\API Development Kit $ArchiCADVersion",
-                "$env:USERPROFILE\GRAPHISOFT\API Development Kit $ArchiCADVersion",
-                "C:\code\archicad-api\API.Development.Kit.WIN.$ArchiCADVersion.3100",
-                "C:\code\archicad-api\API.Development.Kit.WIN.$ArchiCADVersion.6003"
+                "C:\code\archicad-api\API.Development.Kit.WIN.29.3100",
+                "C:\Program Files\GRAPHISOFT\API Development Kit 29",
+                "C:\Program Files (x86)\GRAPHISOFT\API Development Kit 29",
+                "$env:USERPROFILE\GRAPHISOFT\API Development Kit 29"
             )
             
             foreach ($Path in $PossiblePaths) {
@@ -116,7 +115,7 @@ if (-not $SkipBuild) {
             Push-Location $CMakeBuildDir
             
             Write-Host "Running CMake configure..." -ForegroundColor Gray
-            cmake .. -G "Visual Studio 17 2022" -A x64 -T v142 -DAC_API_DEVKIT_DIR="$DevKitPath"
+            cmake .. -G "Visual Studio 17 2022" -A x64 -T v143 -DAC_API_DEVKIT_DIR="$DevKitPath"
             
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "ERROR: CMake configure failed!" -ForegroundColor Red
@@ -218,6 +217,23 @@ if (-not $SkipCopy) {
         exit 1
     }
     
+    # Copy .pdb file (for debugging)
+    $BuildPdbPath = Join-Path $ArchiCADDir "cmake-build\$Configuration\IfcTesterArchiCAD.pdb"
+    $TargetPdbPath = Join-Path $TargetFolder "IfcTesterArchiCAD.pdb"
+    if (Test-Path $BuildPdbPath) {
+        try {
+            Copy-Item $BuildPdbPath $TargetPdbPath -Force
+            Write-Host "✓ Copied debug symbols (PDB)" -ForegroundColor Green
+            Write-Host "  To: $TargetPdbPath" -ForegroundColor Gray
+        } catch {
+            Write-Host "⚠ WARNING: Failed to copy PDB file (debugging may not work)" -ForegroundColor Yellow
+            Write-Host "  $($_.Exception.Message)" -ForegroundColor Gray
+        }
+    } else {
+        Write-Host "⚠ WARNING: PDB file not found (debugging symbols not available)" -ForegroundColor Yellow
+        Write-Host "  Expected: $BuildPdbPath" -ForegroundColor Gray
+    }
+    
     # Copy WebApp folder
     if (Test-Path $BuildWebAppPath) {
         try {
@@ -294,7 +310,7 @@ Write-Host "Next steps:" -ForegroundColor Cyan
 Write-Host "  1. Restart ArchiCAD (if it was running)" -ForegroundColor Gray
 Write-Host "  2. Open Window → Palettes → Report" -ForegroundColor Gray
 Write-Host "  3. Look for these messages:" -ForegroundColor Gray
-Write-Host "     - 'IfcTester ArchiCAD Add-On v1.0.0 (Built: ...)'" -ForegroundColor White
+Write-Host "     - 'IfcTester ArchiCAD Add-On v1.1.0 (Built: ...)'" -ForegroundColor White
 Write-Host "     - 'IfcTester: API server started on http://127.0.0.1:48882'" -ForegroundColor White
 Write-Host ""
 Write-Host "If you see 'Failed to start API server', check:" -ForegroundColor Yellow

@@ -13,8 +13,8 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Release",
     
-    [ValidateSet("25", "26", "27")]
-    [string]$ArchiCADVersion = "27"
+    [ValidateSet("25", "26", "27", "28", "29")]
+    [string]$ArchiCADVersion = "29"
 )
 
 $ErrorActionPreference = "Stop"

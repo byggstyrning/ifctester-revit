@@ -4,7 +4,7 @@
  * Browser Palette Header
  * Defines the dockable palette with browser control for the IfcTester web interface.
  * 
- * Compatible with ArchiCAD 27
+ * Compatible with ArchiCAD 29
  */
 
 #ifndef BROWSER_PALETTE_HPP
@@ -52,7 +52,7 @@ public:
      * Selection change handler
      * Called when selection changes in ArchiCAD
      */
-    static GSErrCode __ACENV_CALL SelectionChangeHandler(const API_Neig* selElemNeig);
+    static GSErrCode SelectionChangeHandler (const API_Neig* selElemNeig);
     
     /**
      * Register palette control callback
@@ -116,7 +116,7 @@ private:
     /**
      * Palette control callback
      */
-    static GSErrCode __ACENV_CALL PaletteControlCallback(Int32 paletteId, API_PaletteMessageID messageID, GS::IntPtr param);
+    static GSErrCode PaletteControlCallback (Int32 paletteId, API_PaletteMessageID messageID, GS::IntPtr param);
     
     // Browser control
     DG::Browser browser;

@@ -15,6 +15,8 @@
 #include <mutex>
 #include <queue>
 #include <condition_variable>
+#include <map>
+#include <chrono>
 
 // Windows headers for HTTP server
 #ifdef _WIN32
@@ -25,8 +27,9 @@
 
 namespace IfcTester {
 
-// Custom Windows message for main-thread processing
+// Custom Windows messages for main-thread processing
 constexpr UINT WM_IFCTESTER_PROCESS_QUEUE = WM_USER + 100;
+constexpr UINT WM_IFCTESTER_PROCESS_EXPORT = WM_USER + 101;
 
 /**
  * Selection request structure for thread-safe queue
@@ -39,6 +42,44 @@ struct SelectionRequest {
     std::mutex* mtx;
     
     SelectionRequest() : processed(false), success(false), cv(nullptr), mtx(nullptr) {}
+};
+
+/**
+ * Export request structure for async queue processing
+ */
+struct ExportRequest {
+    std::string jobId;
+    GS::UniString configName;
+    
+    ExportRequest() {}
+    ExportRequest(const std::string& id, const GS::UniString& config) 
+        : jobId(id), configName(config) {}
+};
+
+/**
+ * Export job status enumeration
+ */
+enum class ExportJobStatus {
+    Running,
+    Complete,
+    Failed
+};
+
+/**
+ * Export job tracking structure
+ */
+struct ExportJob {
+    std::string jobId;
+    GS::UniString configName;
+    ExportJobStatus status;
+    GS::UniString outputPath;
+    GS::UniString errorMessage;
+    std::chrono::steady_clock::time_point createdAt;
+    
+    ExportJob() : status(ExportJobStatus::Running), createdAt(std::chrono::steady_clock::now()) {}
+    ExportJob(const std::string& id, const GS::UniString& config) 
+        : jobId(id), configName(config), status(ExportJobStatus::Running), 
+          createdAt(std::chrono::steady_clock::now()) {}
 };
 
 /**
@@ -126,6 +167,12 @@ public:
     void ProcessSelectionQueue();
     
     /**
+     * Process pending export requests
+     * Must be called from the main thread (via message window callback)
+     */
+    void ProcessExportQueue();
+    
+    /**
      * Set the WebApp folder path
      */
     void SetWebAppPath(const GS::UniString& path) { webAppPath = path; }
@@ -157,9 +204,19 @@ private:
     HttpResponse HandleGetIfcConfigurations();
     
     /**
-     * Handle export-ifc endpoint
+     * Handle export-ifc endpoint (starts async export, returns jobId)
      */
     HttpResponse HandleExportIfc(const GS::UniString& requestBody);
+    
+    /**
+     * Handle export-status endpoint (returns job status)
+     */
+    HttpResponse HandleExportStatus(const std::string& jobId);
+    
+    /**
+     * Handle export-file endpoint (returns file if complete)
+     */
+    HttpResponse HandleExportFile(const std::string& jobId);
     
     /**
      * Parse HTTP request from raw data
@@ -190,12 +247,29 @@ private:
      * Create JSON success response
      */
     static HttpResponse CreateJsonResponse(const GS::UniString& json);
+
+    /**
+     * Escape string for JSON
+     */
+    static GS::UniString EscapeJsonString(const GS::UniString& str);
     
     /**
      * Queue a selection request for main-thread processing
      * Called from HTTP handler (background thread)
      */
     bool QueueSelectionRequest(const GS::UniString& guid);
+    
+    /**
+     * Queue an export request for main-thread processing (async, non-blocking)
+     * Called from HTTP handler (background thread)
+     * @return jobId for the queued export
+     */
+    std::string QueueExportRequest(const GS::UniString& configName);
+    
+    /**
+     * Generate a unique job ID
+     */
+    static std::string GenerateJobId();
     
     /**
      * Handle static file serving from WebApp folder
@@ -229,6 +303,14 @@ private:
     // Thread-safe selection queue for main-thread processing
     std::queue<SelectionRequest*> selectionQueue;
     std::mutex queueMutex;
+    
+    // Thread-safe export queue for main-thread processing
+    std::queue<ExportRequest> exportQueue;
+    std::mutex exportQueueMutex;
+    
+    // Export job tracking map (jobId -> ExportJob)
+    std::map<std::string, ExportJob> exportJobs;
+    std::mutex exportJobsMutex;
     
     // Hidden window handle for receiving messages on the main thread
     HWND messageWindow;

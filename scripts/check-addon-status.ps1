@@ -18,7 +18,7 @@ Write-Host ""
 
 # Check if add-on file exists
 Write-Host "2. Checking add-on installation..." -ForegroundColor Yellow
-$addonPath = "$env:APPDATA\Graphisoft\ArchiCAD 27\Add-Ons\IfcTesterArchiCAD\IfcTesterArchiCAD.apx"
+$addonPath = "$env:APPDATA\Graphisoft\ArchiCAD 29\Add-Ons\IfcTesterArchiCAD\IfcTesterArchiCAD.apx"
 if (Test-Path $addonPath) {
     $file = Get-Item $addonPath
     Write-Host "   ✓ Add-on file found" -ForegroundColor Green
@@ -56,4 +56,5 @@ Write-Host "  - Or: File → Info → Action Center → Reports" -ForegroundColo
 Write-Host ""
 Write-Host "You can also test the API server in your browser:" -ForegroundColor Cyan
 Write-Host "  http://localhost:48882/status" -ForegroundColor White
+
 

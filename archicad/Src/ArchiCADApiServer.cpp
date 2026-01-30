@@ -375,10 +375,16 @@ std::string ArchiCADApiServer::FormatResponse(const HttpResponse& response)
     stream << "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n";
     stream << "Access-Control-Allow-Headers: Content-Type\r\n";
     
+    // Calculate correct body length in bytes
+    std::string bodyStr;
+    if (!response.isBinary) {
+        bodyStr = response.body.ToCStr().Get();
+    }
+    
     if (response.isBinary) {
         stream << "Content-Length: " << response.binaryBody.size() << "\r\n";
     } else {
-        stream << "Content-Length: " << response.body.GetLength() << "\r\n";
+        stream << "Content-Length: " << bodyStr.length() << "\r\n";
     }
     stream << "\r\n";
     
@@ -386,7 +392,7 @@ std::string ArchiCADApiServer::FormatResponse(const HttpResponse& response)
     if (response.isBinary) {
         stream.write(response.binaryBody.data(), response.binaryBody.size());
     } else {
-        stream << response.body.ToCStr().Get();
+        stream << bodyStr;
     }
     
     return stream.str();
@@ -422,6 +428,16 @@ HttpResponse ArchiCADApiServer::HandleRequest(const HttpRequest& request)
     else if (path == "/api/export-ifc" && request.method == "POST") {
         return HandleExportIfc(request.body);
     }
+    else if (path.BeginsWith("/api/export-status/") && request.method == "GET") {
+        GS::UniString jobIdStr = path.GetSubstring(19, path.GetLength() - 19);
+        std::string jobId = jobIdStr.ToCStr().Get();
+        return HandleExportStatus(jobId);
+    }
+    else if (path.BeginsWith("/api/export-file/") && request.method == "GET") {
+        GS::UniString jobIdStr = path.GetSubstring(17, path.GetLength() - 17);
+        std::string jobId = jobIdStr.ToCStr().Get();
+        return HandleExportFile(jobId);
+    }
     // Legacy API routes (without /api prefix) for backwards compatibility
     else if (path == "/status" && request.method == "GET") {
         return HandleStatus();
@@ -437,9 +453,18 @@ HttpResponse ArchiCADApiServer::HandleRequest(const HttpRequest& request)
     else if (path == "/export-ifc" && request.method == "POST") {
         return HandleExportIfc(request.body);
     }
+    else if (path.BeginsWith("/export-status/") && request.method == "GET") {
+        GS::UniString jobIdStr = path.GetSubstring(15, path.GetLength() - 15);
+        std::string jobId = jobIdStr.ToCStr().Get();
+        return HandleExportStatus(jobId);
+    }
+    else if (path.BeginsWith("/export-file/") && request.method == "GET") {
+        GS::UniString jobIdStr = path.GetSubstring(13, path.GetLength() - 13);
+        std::string jobId = jobIdStr.ToCStr().Get();
+        return HandleExportFile(jobId);
+    }
     // Static file serving for the webapp
     else if (request.method == "GET") {
-        ACAPI_WriteReport("IfcTester API Server: Handling GET request for path: %s", false, path.ToCStr().Get());
         return HandleStaticFile(path);
     }
     
@@ -463,7 +488,7 @@ HttpResponse ArchiCADApiServer::HandleStatus()
     json << "\"status\":\"" << (configsLoaded ? "ok" : "initializing") << "\",";
     json << "\"connected\":true,";
     json << "\"configsReady\":" << (configsLoaded ? "true" : "false") << ",";
-    json << "\"version\":\"1.0.0\"";
+    json << "\"version\":\"1.1.0\"";
     json << "}";
     
     return CreateJsonResponse(GS::UniString(json.str().c_str()));
@@ -577,6 +602,111 @@ void ArchiCADApiServer::ProcessSelectionQueue()
     }
 }
 
+void ArchiCADApiServer::ProcessExportQueue()
+{
+    while (true) {
+        ExportRequest request;
+        
+        {
+            std::lock_guard<std::mutex> lock(exportQueueMutex);
+            if (exportQueue.empty()) {
+                break;
+            }
+            request = exportQueue.front();
+            exportQueue.pop();
+        }
+        
+        if (request.jobId.empty()) {
+            break;
+        }
+        
+        // Process the export on the main thread
+        bool success = false;
+        GS::UniString outputPath;
+        GS::UniString errorMessage;
+        
+        try {
+            ACAPI_WriteReport("IfcTester API Server: Processing export job %s on MAIN THREAD for config: %s", false, 
+                request.jobId.c_str(), request.configName.ToCStr().Get());
+            success = ExportToIFC(request.configName, outputPath, &errorMessage);
+            ACAPI_WriteReport("IfcTester API Server: Export job %s completed on main thread, success=%d", false, 
+                request.jobId.c_str(), success ? 1 : 0);
+        } catch (const std::exception& e) {
+            ACAPI_WriteReport("IfcTester API Server: Exception while processing export job %s: %s", false, 
+                request.jobId.c_str(), e.what());
+            errorMessage = GS::UniString::Printf("Exception: %s", e.what());
+            success = false;
+        } catch (...) {
+            ACAPI_WriteReport("IfcTester API Server: Unknown exception while processing export job %s", false, 
+                request.jobId.c_str());
+            errorMessage = "Unknown exception occurred";
+            success = false;
+        }
+        
+        // Update job status in the jobs map
+        {
+            std::lock_guard<std::mutex> lock(exportJobsMutex);
+            auto it = exportJobs.find(request.jobId);
+            if (it != exportJobs.end()) {
+                if (success) {
+                    it->second.status = ExportJobStatus::Complete;
+                    it->second.outputPath = outputPath;
+                } else {
+                    it->second.status = ExportJobStatus::Failed;
+                    it->second.errorMessage = errorMessage;
+                }
+            }
+        }
+    }
+}
+
+std::string ArchiCADApiServer::GenerateJobId()
+{
+    // Generate a unique job ID using timestamp + random suffix
+    auto now = std::chrono::system_clock::now();
+    auto timestamp = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+    
+    // Add a random component
+    static int counter = 0;
+    counter++;
+    
+    std::ostringstream oss;
+    oss << "job_" << timestamp << "_" << counter;
+    return oss.str();
+}
+
+std::string ArchiCADApiServer::QueueExportRequest(const GS::UniString& configName)
+{
+    if (messageWindow == nullptr) {
+        ACAPI_WriteReport("IfcTester API Server: Message window not initialized, cannot queue export", false);
+        return "";
+    }
+    
+    // Generate unique job ID
+    std::string jobId = GenerateJobId();
+    
+    // Create job entry in the tracking map
+    {
+        std::lock_guard<std::mutex> lock(exportJobsMutex);
+        exportJobs[jobId] = ExportJob(jobId, configName);
+    }
+    
+    // Create request and add to queue
+    ExportRequest request(jobId, configName);
+    {
+        std::lock_guard<std::mutex> lock(exportQueueMutex);
+        exportQueue.push(request);
+    }
+    
+    // Post message to main thread to process queue (non-blocking)
+    PostMessage(messageWindow, WM_IFCTESTER_PROCESS_EXPORT, 0, 0);
+    
+    ACAPI_WriteReport("IfcTester API Server: Queued export job %s for config: %s", false, 
+        jobId.c_str(), configName.ToCStr().Get());
+    
+    return jobId;
+}
+
 HttpResponse ArchiCADApiServer::HandleGetIfcConfigurations()
 {
     GS::Array<IFCConfiguration> configs = GetIFCExportConfigurations();
@@ -590,9 +720,9 @@ HttpResponse ArchiCADApiServer::HandleGetIfcConfigurations()
         first = false;
         
         json << "{";
-        json << "\"name\":\"" << config.name.ToCStr().Get() << "\",";
-        json << "\"description\":\"" << config.description.ToCStr().Get() << "\",";
-        json << "\"version\":\"" << config.version.ToCStr().Get() << "\"";
+        json << "\"name\":\"" << EscapeJsonString(config.name).ToCStr().Get() << "\",";
+        json << "\"description\":\"" << EscapeJsonString(config.description).ToCStr().Get() << "\",";
+        json << "\"version\":\"" << EscapeJsonString(config.version).ToCStr().Get() << "\"";
         json << "}";
     }
     
@@ -629,16 +759,74 @@ HttpResponse ArchiCADApiServer::HandleExportIfc(const GS::UniString& requestBody
         return CreateErrorResponse(400, GS::UniString("Missing configuration parameter"));
     }
     
-    // Export to IFC
-    GS::UniString outputPath;
-    bool success = ExportToIFC(configName, outputPath);
+    // Queue export and return immediately with job ID (async pattern)
+    std::string jobId = QueueExportRequest(configName);
     
-    if (!success || outputPath.IsEmpty()) {
-        return CreateErrorResponse(500, GS::UniString("IFC export failed"));
+    if (jobId.empty()) {
+        return CreateErrorResponse(500, GS::UniString("Failed to queue export request"));
+    }
+    
+    // Return job ID immediately - client will poll for status
+    std::ostringstream json;
+    json << "{\"jobId\":\"" << jobId << "\",\"status\":\"running\"}";
+    
+    return CreateJsonResponse(GS::UniString(json.str().c_str()));
+}
+
+HttpResponse ArchiCADApiServer::HandleExportStatus(const std::string& jobId)
+{
+    std::lock_guard<std::mutex> lock(exportJobsMutex);
+    
+    auto it = exportJobs.find(jobId);
+    if (it == exportJobs.end()) {
+        return CreateErrorResponse(404, GS::UniString("Job not found"));
+    }
+    
+    const ExportJob& job = it->second;
+    
+    std::ostringstream json;
+    json << "{\"jobId\":\"" << jobId << "\",";
+    
+    switch (job.status) {
+        case ExportJobStatus::Running:
+            json << "\"status\":\"running\"";
+            break;
+        case ExportJobStatus::Complete:
+            json << "\"status\":\"complete\"";
+            break;
+        case ExportJobStatus::Failed:
+            json << "\"status\":\"failed\",";
+            json << "\"error\":\"" << EscapeJsonString(job.errorMessage).ToCStr().Get() << "\"";
+            break;
+    }
+    
+    json << "}";
+    
+    return CreateJsonResponse(GS::UniString(json.str().c_str()));
+}
+
+HttpResponse ArchiCADApiServer::HandleExportFile(const std::string& jobId)
+{
+    ExportJob job;
+    
+    // Find and validate job
+    {
+        std::lock_guard<std::mutex> lock(exportJobsMutex);
+        
+        auto it = exportJobs.find(jobId);
+        if (it == exportJobs.end()) {
+            return CreateErrorResponse(404, GS::UniString("Job not found"));
+        }
+        
+        job = it->second;
+        
+        if (job.status != ExportJobStatus::Complete) {
+            return CreateErrorResponse(400, GS::UniString("Export not yet complete"));
+        }
     }
     
     // Read the exported file
-    std::ifstream file(outputPath.ToCStr().Get(), std::ios::binary);
+    std::ifstream file(job.outputPath.ToCStr().Get(), std::ios::binary);
     if (!file) {
         return CreateErrorResponse(500, GS::UniString("Failed to read exported IFC file"));
     }
@@ -657,8 +845,16 @@ HttpResponse ArchiCADApiServer::HandleExportIfc(const GS::UniString& requestBody
     file.read(response.binaryBody.data(), fileSize);
     file.close();
     
-    // Delete temporary file (using standard C++ API)
-    std::remove(outputPath.ToCStr().Get());
+    // Delete temporary file
+    std::remove(job.outputPath.ToCStr().Get());
+    
+    // Remove job from tracking map (cleanup)
+    {
+        std::lock_guard<std::mutex> lock(exportJobsMutex);
+        exportJobs.erase(jobId);
+    }
+    
+    ACAPI_WriteReport("IfcTester API Server: Delivered export file for job %s, cleaned up", false, jobId.c_str());
     
     return response;
 }
@@ -710,6 +906,36 @@ HttpResponse ArchiCADApiServer::CreateJsonResponse(const GS::UniString& json)
     return response;
 }
 
+GS::UniString ArchiCADApiServer::EscapeJsonString(const GS::UniString& str)
+{
+    std::string input = str.ToCStr().Get();
+    std::string output;
+    output.reserve(input.length() + 10); // Reserve a bit more
+
+    for (char c : input) {
+        switch (c) {
+            case '"': output += "\\\""; break;
+            case '\\': output += "\\\\"; break;
+            case '\b': output += "\\b"; break;
+            case '\f': output += "\\f"; break;
+            case '\n': output += "\\n"; break;
+            case '\r': output += "\\r"; break;
+            case '\t': output += "\\t"; break;
+            default:
+                if (static_cast<unsigned char>(c) < 0x20) {
+                    char buf[7];
+                    snprintf(buf, sizeof(buf), "\\u%04x", c);
+                    output += buf;
+                } else {
+                    output += c;
+                }
+                break;
+        }
+    }
+
+    return GS::UniString(output.c_str());
+}
+
 // ============================================================================
 // Static File Serving
 // ============================================================================
@@ -721,10 +947,6 @@ HttpResponse ArchiCADApiServer::HandleStaticFile(const GS::UniString& path)
         ACAPI_WriteReport("IfcTester API Server: WebApp path not set", false);
         return CreateErrorResponse(500, GS::UniString("WebApp path not configured"));
     }
-    
-    // Log the request for debugging
-    ACAPI_WriteReport("IfcTester API Server: Serving static file - path: %s, webAppPath: %s", false, 
-        path.ToCStr().Get(), webAppPath.ToCStr().Get());
     
     // Determine the file path
     GS::UniString filePath = webAppPath;
@@ -758,18 +980,13 @@ HttpResponse ArchiCADApiServer::HandleStaticFile(const GS::UniString& path)
     // Read the file
     std::ifstream file(filePathStr, std::ios::binary);
     if (!file) {
-        ACAPI_WriteReport("IfcTester API Server: File not found: %s", false, filePathStr.c_str());
         // Try with index.html for SPA routing (client-side routing support)
         GS::UniString indexPath = webAppPath + "\\index.html";
         file.open(indexPath.ToCStr().Get(), std::ios::binary);
         if (!file) {
-            ACAPI_WriteReport("IfcTester API Server: index.html also not found at: %s", false, indexPath.ToCStr().Get());
             return CreateErrorResponse(404, GS::UniString("File not found"));
         }
         filePath = indexPath;
-        ACAPI_WriteReport("IfcTester API Server: Serving index.html for SPA routing", false);
-    } else {
-        ACAPI_WriteReport("IfcTester API Server: Successfully found file: %s", false, filePathStr.c_str());
     }
     
     // Get file size

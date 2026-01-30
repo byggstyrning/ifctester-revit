@@ -15,13 +15,22 @@ IDS authoring and auditing tool for ArchiCAD. This add-on embeds the IfcTester w
 
 ### For Building
 
-- **Visual Studio 2022** with C++ desktop development workload
-- **ArchiCAD API Development Kit** (version 25, 26, or 27)
+**Windows:**
+- **Visual Studio 2022** with C++ desktop development workload (v143 toolset)
+- **ArchiCAD 29 API Development Kit**
 - **Windows 10/11** (64-bit)
+- **C++20** compiler support
+
+**macOS:**
+- **Xcode** (latest version) with Command Line Tools
+- **CMake** 3.16 or later
+- **Python** 3.x (for resource compilation)
+- **ArchiCAD 29 API Development Kit** for macOS
+- **macOS 10.15** (Catalina) or later
 
 ### For Running
 
-- **ArchiCAD 25, 26, or 27** (Windows)
+- **ArchiCAD 29** (Windows or macOS)
 
 ## Quick Start Guide
 
@@ -36,21 +45,20 @@ Run this single command to build and install everything:
 ### Command Options
 
 - `-Configuration`: `Debug` or `Release` (default: `Release`)
-- `-ArchiCADVersion`: `25`, `26`, `27`, or `29` (default: `27`)
 - `-SkipBuild`: Skip building (only copy existing build)
 - `-SkipCopy`: Skip copying (only build)
 - `-SkipVerify`: Skip verification step
 
 ### Examples
 
-**Debug build for ArchiCAD 27:**
+**Debug build:**
 ```powershell
-.\scripts\build-and-install.ps1 -Configuration Debug -ArchiCADVersion 27
+.\scripts\build-and-install.ps1 -Configuration Debug
 ```
 
-**Release build for ArchiCAD 27:**
+**Release build:**
 ```powershell
-.\scripts\build-and-install.ps1 -Configuration Release -ArchiCADVersion 27
+.\scripts\build-and-install.ps1 -Configuration Release
 ```
 
 **Only copy existing build (skip build step):**
@@ -79,7 +87,7 @@ Run this single command to build and install everything:
 1. **Restart ArchiCAD** (if it was running)
 2. **Open the Report window**: `Window → Palettes → Report`
 3. **Look for these messages**:
-   - ✅ `IfcTester ArchiCAD Add-On v1.0.0 (Built: [date] [time])`
+   - ✅ `IfcTester ArchiCAD Add-On v1.1.0 (Built: [date] [time])`
    - ✅ `IfcTester: API server started on http://127.0.0.1:48882`
 
 ### Quick Start Troubleshooting
@@ -93,7 +101,7 @@ Run this single command to build and install everything:
    ```
 3. **Verify installation**:
    ```powershell
-   .\scripts\verify-build.ps1 -Configuration Debug -ArchiCADVersion 27
+   .\scripts\verify-build.ps1 -Configuration Debug
    ```
 
 #### If build fails:
@@ -140,13 +148,15 @@ If you need more control, use these individual scripts:
 ### File Locations
 
 - **Build output**: `archicad\cmake-build\Debug\IfcTesterArchiCAD.apx` (or `Release`)
-- **Installed location**: `%APPDATA%\Graphisoft\ArchiCAD 27\Add-Ons\IfcTesterArchiCAD\`
+- **Installed location**: `%APPDATA%\Graphisoft\ArchiCAD 29\Add-Ons\IfcTesterArchiCAD\`
 - **Web app dist**: `web\dist\`
-- **Web app installed**: `%APPDATA%\Graphisoft\ArchiCAD 27\Add-Ons\IfcTesterArchiCAD\WebApp\`
+- **Web app installed**: `%APPDATA%\Graphisoft\ArchiCAD 29\Add-Ons\IfcTesterArchiCAD\WebApp\`
 
 ## Building
 
 ### Prerequisites
+
+#### Windows
 
 1. Install Visual Studio 2022 with:
    - Desktop development with C++
@@ -157,10 +167,31 @@ If you need more control, use these individual scripts:
 
 3. Set the `ARCHICAD_API_DEVKIT` environment variable to your DevKit path:
    ```powershell
-   $env:ARCHICAD_API_DEVKIT = "C:\Program Files\GRAPHISOFT\API Development Kit 27"
+   $env:ARCHICAD_API_DEVKIT = "C:\code\archicad-api\API.Development.Kit.WIN.29.3100"
+   ```
+
+#### macOS
+
+1. Install Xcode from the Mac App Store
+2. Install Xcode Command Line Tools:
+   ```bash
+   xcode-select --install
+   ```
+3. Install CMake (if not already installed):
+   ```bash
+   brew install cmake
+   # OR download from https://cmake.org/download/
+   ```
+4. Download the ArchiCAD 29 API Development Kit for macOS from:
+   https://archicadapi.graphisoft.com/
+5. Set the `ARCHICAD_API_DEVKIT` environment variable (optional, CMake will auto-detect):
+   ```bash
+   export ARCHICAD_API_DEVKIT="$HOME/Library/Application Support/GRAPHISOFT/API Development Kit 29"
    ```
 
 ### Build Steps
+
+#### Windows Build
 
 #### Using PowerShell Script (Recommended)
 
@@ -179,7 +210,7 @@ Or build only:
 1. **Configure CMake** (generates `cmake-build/` directory and `.sln` file):
    ```powershell
    cd archicad
-   cmake -B cmake-build -S . -G "Visual Studio 17 2022" -A x64 -DAC_API_DEVKIT_DIR="C:\Program Files\GRAPHISOFT\API Development Kit 27"
+   cmake -B cmake-build -S . -G "Visual Studio 17 2022" -A x64 -T v143 -DAC_API_DEVKIT_DIR="C:\code\archicad-api\API.Development.Kit.WIN.29.3100"
    ```
 
 2. **Open in Visual Studio**:
@@ -194,11 +225,81 @@ Or build only:
 
 **Note:** The `cmake-build/` directory (including `IfcTesterArchiCAD.sln`) is gitignored because it contains generated files. CMake will recreate everything when you run `cmake configure`. The source files (`CMakeLists.txt`, `CMakeSettings.json`, and all source code) are tracked in git.
 
+#### macOS Build
+
+1. **Configure CMake** (generates `cmake-build/` directory):
+   ```bash
+   cd archicad
+   cmake -B cmake-build -S . -G "Xcode" -DAC_API_DEVKIT_DIR="$HOME/Library/Application Support/GRAPHISOFT/API Development Kit 29"
+   ```
+   
+   **OR using Unix Makefiles:**
+   ```bash
+   cmake -B cmake-build -S . -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DAC_API_DEVKIT_DIR="$HOME/Library/Application Support/GRAPHISOFT/API Development Kit 29"
+   ```
+
+2. **Build the add-on:**
+   
+   **Using Xcode:**
+   - Open `cmake-build/IfcTesterArchiCAD.xcodeproj` in Xcode
+   - Select the scheme and build configuration (Debug/Release)
+   - Build from Xcode (⌘B or Product → Build)
+   
+   **OR build from command line:**
+   ```bash
+   # Using Xcode generator
+   cmake --build cmake-build --config Release
+   
+   # OR using Makefiles generator
+   cmake --build cmake-build --config Release
+   ```
+
+3. **Verify the build output:**
+   ```bash
+   ls -la cmake-build/Release/IfcTesterArchiCAD.bundle
+   ```
+
+**Note:** CMake will automatically detect the DevKit path if it's in one of these locations:
+- `$HOME/Library/Application Support/GRAPHISOFT/API Development Kit 29`
+- `/Applications/GRAPHISOFT/API Development Kit 29`
+- `/Users/Shared/GRAPHISOFT/API Development Kit 29`
+
+#### Building Mac from Windows (GitHub Actions)
+
+If you don't have access to a Mac, you can use GitHub Actions to build macOS binaries:
+
+1. **Push your code to GitHub** (or use the workflow_dispatch trigger)
+2. **GitHub Actions will automatically build** on macOS runners
+3. **Download the build artifacts** from the Actions tab
+
+The workflow file `.github/workflows/build-mac.yml` is configured to:
+- Build the web app
+- Configure CMake for macOS
+- Build the ArchiCAD add-on bundle
+- Upload build artifacts for download
+
+**To trigger manually:**
+1. Go to your GitHub repository
+2. Click **Actions** tab
+3. Select **Build ArchiCAD Add-On for macOS**
+4. Click **Run workflow**
+5. Select ArchiCAD version and build configuration
+6. Click **Run workflow**
+
+**Note:** You'll need to have the ArchiCAD API DevKit installed on the GitHub Actions runner, or configure a self-hosted runner with the DevKit pre-installed.
+
 ### Build Output
 
+**Windows:**
 The compiled add-on will be located at:
 ```
 archicad\cmake-build\Release\IfcTesterArchiCAD.apx
+```
+
+**macOS:**
+The compiled add-on will be located at:
+```
+archicad/cmake-build/Release/IfcTesterArchiCAD.bundle
 ```
 
 ## Installation
@@ -206,9 +307,12 @@ archicad\cmake-build\Release\IfcTesterArchiCAD.apx
 ### Manual Installation
 
 1. Build the add-on (see above)
-2. Copy `IfcTesterArchiCAD.apx` to your ArchiCAD Add-Ons folder:
-   - Windows: `%APPDATA%\Graphisoft\ArchiCAD 27\Add-Ons\IfcTesterArchiCAD\`
-3. Copy the `web\dist` folder to `%APPDATA%\Graphisoft\ArchiCAD 27\Add-Ons\IfcTesterArchiCAD\WebApp`
+2. Copy the add-on to your ArchiCAD Add-Ons folder:
+   - **Windows**: Copy `IfcTesterArchiCAD.apx` to `%APPDATA%\Graphisoft\ArchiCAD 29\Add-Ons\IfcTesterArchiCAD\`
+   - **macOS**: Copy `IfcTesterArchiCAD.bundle` to `~/Library/Application Support/GRAPHISOFT/ArchiCAD 29/Add-Ons/IfcTesterArchiCAD/`
+3. Copy the `web\dist` folder contents:
+   - **Windows**: Copy to `%APPDATA%\Graphisoft\ArchiCAD 29\Add-Ons\IfcTesterArchiCAD\WebApp`
+   - **macOS**: Copy to `~/Library/Application Support/GRAPHISOFT/ArchiCAD 29/Add-Ons/IfcTesterArchiCAD/WebApp`
 4. Restart ArchiCAD
 
 ### Using Installer
@@ -253,7 +357,7 @@ http://localhost:48882/status
 
 **Expected response if server is running:**
 ```json
-{"status":"ok","connected":true,"configsReady":true,"version":"1.0.0"}
+{"status":"ok","connected":true,"configsReady":true,"version":"1.1.0"}
 ```
 
 #### Using curl:
@@ -298,10 +402,10 @@ Verify the add-on files are in the correct location:
 
 ```powershell
 # Check if add-on file exists
-Test-Path "$env:APPDATA\Graphisoft\ArchiCAD 27\Add-Ons\IfcTesterArchiCAD\IfcTesterArchiCAD.apx"
+Test-Path "$env:APPDATA\Graphisoft\ArchiCAD 29\Add-Ons\IfcTesterArchiCAD\IfcTesterArchiCAD.apx"
 
 # Check file details
-Get-Item "$env:APPDATA\Graphisoft\ArchiCAD 27\Add-Ons\IfcTesterArchiCAD\IfcTesterArchiCAD.apx" | Select-Object Name, Length, LastWriteTime
+Get-Item "$env:APPDATA\Graphisoft\ArchiCAD 29\Add-Ons\IfcTesterArchiCAD\IfcTesterArchiCAD.apx" | Select-Object Name, Length, LastWriteTime
 ```
 
 ### Method 5: Try Opening the Panel
@@ -342,7 +446,7 @@ Write-Host ""
 
 # Check if add-on file exists
 Write-Host "2. Checking add-on installation..." -ForegroundColor Yellow
-$addonPath = "$env:APPDATA\Graphisoft\ArchiCAD 27\Add-Ons\IfcTesterArchiCAD\IfcTesterArchiCAD.apx"
+$addonPath = "$env:APPDATA\Graphisoft\ArchiCAD 29\Add-Ons\IfcTesterArchiCAD\IfcTesterArchiCAD.apx"
 if (Test-Path $addonPath) {
     $file = Get-Item $addonPath
     Write-Host "   ✓ Add-on file found" -ForegroundColor Green
@@ -472,7 +576,7 @@ The ArchiCAD add-on uses port **48882** by default (different from Revit's port 
      - `View → Palettes → Report`
 
 2. **Look for add-on initialization messages:**
-   - `IfcTester ArchiCAD Add-On v1.0.0 (Built: [date] [time])`
+   - `IfcTester ArchiCAD Add-On v1.1.0 (Built: [date] [time])`
    - `IfcTester: API server started on http://127.0.0.1:48882` (success)
    - `IfcTester: Failed to start API server on port 48882` (failure)
 
@@ -504,7 +608,7 @@ The ArchiCAD add-on uses port **48882** by default (different from Revit's port 
    - Open PowerShell or Command Prompt
    - Run: `curl http://localhost:48882/status`
    - Or use browser: Navigate to `http://localhost:48882/status`
-   - Expected response: `{"status":"ok","connected":true,"configsReady":true,"version":"1.0.0"}`
+   - Expected response: `{"status":"ok","connected":true,"configsReady":true,"version":"1.1.0"}`
 
 3. **Check Port Availability**
    ```powershell
@@ -716,9 +820,10 @@ This section summarizes key learnings, common issues, and solutions for building
 
 #### Required Software
 
-| Component | ArchiCAD 27 | Notes |
+| Component | ArchiCAD 29 | Notes |
 |-----------|-------------|-------|
-| Visual Studio | 2019 (v142 toolset) | Can use VS2022 with v142 toolset installed |
+| Visual Studio | 2022 (v143 toolset) | Required for ArchiCAD 29 |
+| C++ Standard | C++20 | Required for ArchiCAD 29 |
 | Windows SDK | 10.0+ | |
 | Python | 3.x | For resource compilation scripts |
 
@@ -727,13 +832,13 @@ This section summarizes key learnings, common issues, and solutions for building
 Set the `ARCHICAD_API_DEVKIT` environment variable to point to your DevKit:
 
 ```powershell
-$env:ARCHICAD_API_DEVKIT = "C:\path\to\API.Development.Kit.WIN.27.6003"
+$env:ARCHICAD_API_DEVKIT = "C:\code\archicad-api\API.Development.Kit.WIN.29.3100"
 ```
 
 #### DevKit Directory Structure
 
 ```
-API.Development.Kit.WIN.27.6003/
+API.Development.Kit.WIN.29.3100/
 ├── Doc/
 │   └── html/              # API Documentation (open index.html)
 ├── Examples/              # Example add-ons with CMakeLists.txt
@@ -758,14 +863,11 @@ API.Development.Kit.WIN.27.6003/
 
 The DevKit major version must match your ArchiCAD major version.
 
-**Good news**: Minor build differences within the same major version are typically compatible!
-- DevKit 27.6003 works with ArchiCAD 27.3.0 (build 6080) ✅
+This plugin targets **ArchiCAD 29** exclusively.
 
-| ArchiCAD Version | DevKit Version | Visual Studio Toolset |
-|------------------|----------------|----------------------|
-| ArchiCAD 27.x | 27.6003+ | v142 (VS2019) |
-| ArchiCAD 26.x | 26.x | v142 (VS2019) |
-| ArchiCAD 29.x | 29.x | v143 (VS2022) |
+| ArchiCAD Version | DevKit Version | Visual Studio Toolset | C++ Standard |
+|------------------|----------------|----------------------|--------------|
+| ArchiCAD 29.x | 29.3100 | v143 (VS2022) | C++20 |
 
 Reference: [API Compatibility](https://graphisoft.github.io/archicad-api-devkit/apicompatibility_1.html)
 
@@ -773,14 +875,13 @@ Reference: [API Compatibility](https://graphisoft.github.io/archicad-api-devkit/
 
 DevKit version is in `VersionAndBuildNumber.txt`:
 ```
-!define API_MAINVERSION "27" 
-!define AC_BUILD_NUMBER "6003"
+!define API_MAINVERSION "29" 
+!define AC_BUILD_NUMBER "3100"
 ```
 
 Server version constants in `ACAPinc.h`:
 ```cpp
-#define ServerMainVers_2700  0x001B  // ARCHICAD 27
-#define ServerMainVers_2600  0x001A  // ARCHICAD 26
+#define ServerMainVers_2900  0x001D  // ARCHICAD 29
 ```
 
 ### MDID (Module Identifier)
@@ -1240,7 +1341,7 @@ The **recommended** approach is to use CMake like the official examples. This en
 cd archicad
 mkdir cmake-build
 cd cmake-build
-cmake .. -G "Visual Studio 17 2022" -A x64 -T v142 -DAC_API_DEVKIT_DIR="C:\code\archicad-api\API.Development.Kit.WIN.27.6003"
+cmake .. -G "Visual Studio 17 2022" -A x64 -T v143 -DAC_API_DEVKIT_DIR="C:\code\archicad-api\API.Development.Kit.WIN.29.3100"
 
 # Build
 cmake --build . --config Release
@@ -1259,13 +1360,14 @@ The CMake build uses:
 #### Manual Build (Alternative)
 
 ```powershell
-$DevKitPath = "C:\code\archicad-api\API.Development.Kit.WIN.27.6003"
+$DevKitPath = "C:\code\archicad-api\API.Development.Kit.WIN.29.3100"
 $env:ARCHICAD_API_DEVKIT = $DevKitPath
 
 & "C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe" `
     "IfcTesterArchiCAD.vcxproj" `
     /p:Configuration=Release `
-    /p:Platform=x64
+    /p:Platform=x64 `
+    /p:PlatformToolset=v143
 ```
 
 ### Resource Compilation
@@ -1274,9 +1376,12 @@ GRC files are compiled using GRAPHISOFT's ResConv tool (included in the DevKit).
 
 ### Version Compatibility
 
-The add-on is designed to work with ArchiCAD 25-27. Different versions may require:
-- Rebuilding against the appropriate DevKit
-- Minor API adjustments for deprecated/changed functions
+The add-on is designed to work with **ArchiCAD 29**.
+
+ArchiCAD 29 requires:
+- Visual Studio 2022 with v143 toolset
+- C++20 compiler support
+- ArchiCAD 29 API DevKit (29.3100 or later)
 
 ### Useful Resources
 
@@ -1320,17 +1425,18 @@ To debug JavaScript in the embedded browser:
 
 ### Development Troubleshooting Checklist
 
-- [ ] DevKit version matches ArchiCAD version
+- [ ] DevKit version matches ArchiCAD version (29.x)
 - [ ] Building in **Release** mode (not Debug)
 - [ ] `_ITERATOR_DEBUG_LEVEL=0` in Release preprocessor definitions
-- [ ] Correct Visual Studio toolset (v142 for AC27)
+- [ ] Correct Visual Studio toolset (v143 for AC29)
+- [ ] C++20 enabled
 - [ ] All required libraries linked
 - [ ] MDID properly defined in GRC
 - [ ] Using correct API function names for target version
 - [ ] `APIAddon_Normal` returned from CheckEnvironment
 
-*Last updated: November 2024*
-*Tested with: ArchiCAD 27, DevKit 27.6003, Visual Studio 2022 with v142 toolset*
+*Last updated: January 2026*
+*Tested with: ArchiCAD 29, DevKit 29.3100, Visual Studio 2022 with v143 toolset*
 
 ## License
 

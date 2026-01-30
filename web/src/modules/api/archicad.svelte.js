@@ -263,7 +263,7 @@ export const getIfcConfigurations = async () => {
 };
 
 /**
- * Export IFC from ArchiCAD
+ * Export IFC from ArchiCAD using async polling pattern
  * @param {string} configurationName - Name of the IFC export configuration to use
  * @returns {Promise<File|null>} Returns the exported IFC file, or null if failed
  */
@@ -279,9 +279,10 @@ export const exportIfc = async (configurationName) => {
     }
     
     try {
-        const exportUrl = `${ArchiCAD.apiUrl}/export-ifc`;
+        // Step 1: Start the export and get job ID
+        const startUrl = `${ArchiCAD.apiUrl}/export-ifc`;
         
-        const response = await fetch(exportUrl, {
+        const startResponse = await fetch(startUrl, {
             method: 'POST',
             mode: 'cors',
             headers: {
@@ -290,14 +291,70 @@ export const exportIfc = async (configurationName) => {
             body: JSON.stringify({ configuration: configurationName })
         });
         
-        if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ error: 'Unknown error' }));
-            throw new Error(errorData.error || `HTTP ${response.status}: ${response.statusText}`);
+        if (!startResponse.ok) {
+            const errorData = await startResponse.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(errorData.error || `HTTP ${startResponse.status}: ${startResponse.statusText}`);
         }
         
-        const blob = await response.blob();
+        const startData = await startResponse.json();
+        const jobId = startData.jobId;
         
-        const contentDisposition = response.headers.get('Content-Disposition');
+        if (!jobId) {
+            throw new Error('No job ID returned from export request');
+        }
+        
+        console.log(`ArchiCAD export started, job ID: ${jobId}`);
+        
+        // Step 2: Poll for completion
+        const pollInterval = 1500; // 1.5 seconds
+        const maxPolls = 400; // ~10 minutes total
+        let pollCount = 0;
+        
+        while (pollCount < maxPolls) {
+            await new Promise(resolve => setTimeout(resolve, pollInterval));
+            pollCount++;
+            
+            const statusUrl = `${ArchiCAD.apiUrl}/export-status/${jobId}`;
+            const statusResponse = await fetch(statusUrl, {
+                method: 'GET',
+                mode: 'cors'
+            });
+            
+            if (!statusResponse.ok) {
+                console.warn(`Status poll ${pollCount} failed: ${statusResponse.status}`);
+                continue;
+            }
+            
+            const statusData = await statusResponse.json();
+            
+            if (statusData.status === 'complete') {
+                console.log(`ArchiCAD export completed after ${pollCount} polls`);
+                break;
+            } else if (statusData.status === 'failed') {
+                throw new Error(statusData.error || 'Export failed');
+            }
+            // status === 'running', continue polling
+        }
+        
+        if (pollCount >= maxPolls) {
+            throw new Error('Export timed out waiting for completion');
+        }
+        
+        // Step 3: Download the file
+        const fileUrl = `${ArchiCAD.apiUrl}/export-file/${jobId}`;
+        const fileResponse = await fetch(fileUrl, {
+            method: 'GET',
+            mode: 'cors'
+        });
+        
+        if (!fileResponse.ok) {
+            const errorData = await fileResponse.json().catch(() => ({ error: 'Unknown error' }));
+            throw new Error(errorData.error || `Failed to download file: HTTP ${fileResponse.status}`);
+        }
+        
+        const blob = await fileResponse.blob();
+        
+        const contentDisposition = fileResponse.headers.get('Content-Disposition');
         let fileName = `ArchiCAD_Export_${new Date().toISOString().replace(/[:.]/g, '-')}.ifc`;
         if (contentDisposition) {
             const fileNameMatch = contentDisposition.match(/filename="?([^"]+)"?/);

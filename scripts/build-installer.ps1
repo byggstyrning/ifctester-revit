@@ -159,6 +159,10 @@ Copy-Item -Path "$($PublishAddinDir.FullName)\*" -Destination $StagingPluginDir 
 Write-Host "  Cleaning up old WebAec files..." -ForegroundColor Gray
 Get-ChildItem -Path $StagingPluginDir -Filter "WebAec*" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 
+# Remove any .addin files from staging (these are generated separately and should not be bundled with DLLs)
+Write-Host "  Removing .addin files from staging (will be generated separately)..." -ForegroundColor Gray
+Get-ChildItem -Path $StagingPluginDir -Filter "*.addin" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+
 # Ensure web app is copied
 $WebDistDir = Join-Path $WebDir "dist"
 if (Test-Path $WebDistDir) {

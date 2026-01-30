@@ -2,11 +2,14 @@
 // IfcTester ArchiCAD Add-On
 // Non-localizable resources (RFIX)
 // Contains MDID (Module Identifier) resource
+// 
+// Note: Using MDID_APICD (Graphisoft development ID) for testing.
+// For production, register with Graphisoft to get your own developer ID.
 // ******************************************************************************/
 
 #include "MDIDs_APICD.h"
 
 'MDID' 32500 "Add-On Identifier" {
-    628121456
+    927492947
     1703304677
 }

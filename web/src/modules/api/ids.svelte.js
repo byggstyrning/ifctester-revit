@@ -413,11 +413,11 @@ function stringifyRestriction(restriction) {
 }
 
 function renderFacetString(text) {
-    // Convert **text** to <strong>text</strong>
-    text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
+    // Convert **text** to text 
+    text = text.replace(/\*\*([^*]+)\*\*/g, ' $1 ');
     
-    // Convert `text` to <code>text</code>
-    text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+    // Convert `text` to text 
+    text = text.replace(/`([^`]+)`/g, ' $1 ');
     
     return text;
 }

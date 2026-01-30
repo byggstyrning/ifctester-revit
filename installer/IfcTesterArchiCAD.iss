@@ -7,7 +7,7 @@
 ; - Configure ArchiCAD to load the add-on
 
 #define MyAppName "IfcTester for ArchiCAD"
-#define MyAppVersion "1.0.0"
+#define MyAppVersion "1.1.0"
 #define MyAppPublisher "Byggstyrning"
 #define MyAppURL "https://github.com/example/ifctester"
 
@@ -25,7 +25,7 @@ AllowNoIcons=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist
 OutputBaseFilename=IfcTesterArchiCAD-Setup-v{#MyAppVersion}
-SetupIconFile=..\archicad\Resources\Icons\IfcTester.png
+; SetupIconFile requires .ico format - using default
 Compression=lzma2/ultra64
 SolidCompression=yes
 WizardStyle=modern
@@ -42,9 +42,7 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 
 [Components]
 Name: "core"; Description: "IfcTester Add-On"; Types: full custom; Flags: fixed
-Name: "ac27"; Description: "ArchiCAD 27 Support"; Types: full
-Name: "ac26"; Description: "ArchiCAD 26 Support"; Types: full
-Name: "ac25"; Description: "ArchiCAD 25 Support"; Types: full
+Name: "ac29"; Description: "ArchiCAD 29 Support"; Types: full
 
 [Files]
 ; Main add-on file (versioned builds)
@@ -56,65 +54,27 @@ Source: "..\web\dist\*"; DestDir: "{app}\WebApp"; Flags: ignoreversion recursesu
 ; Icons
 Source: "..\archicad\Resources\Icons\*"; DestDir: "{app}\Resources\Icons"; Flags: ignoreversion; Components: core
 
-; ArchiCAD 27 Add-On folder
-Source: "..\archicad\Build\Release\IfcTesterArchiCAD.apx"; DestDir: "{code:GetArchiCAD27AddOnsPath}"; Flags: ignoreversion external skipifsourcedoesntexist; Components: ac27; Check: ArchiCAD27Installed
-
-; ArchiCAD 26 Add-On folder
-Source: "..\archicad\Build\Release\IfcTesterArchiCAD.apx"; DestDir: "{code:GetArchiCAD26AddOnsPath}"; Flags: ignoreversion external skipifsourcedoesntexist; Components: ac26; Check: ArchiCAD26Installed
-
-; ArchiCAD 25 Add-On folder  
-Source: "..\archicad\Build\Release\IfcTesterArchiCAD.apx"; DestDir: "{code:GetArchiCAD25AddOnsPath}"; Flags: ignoreversion external skipifsourcedoesntexist; Components: ac25; Check: ArchiCAD25Installed
+; ArchiCAD 29 Add-On folder
+Source: "..\archicad\Build\Release\IfcTesterArchiCAD.apx"; DestDir: "{code:GetArchiCAD29AddOnsPath}"; Flags: ignoreversion external skipifsourcedoesntexist; Components: ac29; Check: ArchiCAD29Installed
 
 [Icons]
 Name: "{group}\Uninstall {#MyAppName}"; Filename: "{uninstallexe}"
 
 [Code]
 var
-  ArchiCAD27Path: String;
-  ArchiCAD26Path: String;
-  ArchiCAD25Path: String;
+  ArchiCAD29Path: String;
 
-function ArchiCAD27Installed: Boolean;
+function ArchiCAD29Installed: Boolean;
 begin
-  Result := RegQueryStringValue(HKLM, 'SOFTWARE\GRAPHISOFT\ARCHICAD 27.0.0', 'InstallLocation', ArchiCAD27Path);
+  Result := RegQueryStringValue(HKLM, 'SOFTWARE\GRAPHISOFT\ARCHICAD 29.0.0', 'InstallLocation', ArchiCAD29Path);
   if not Result then
-    Result := RegQueryStringValue(HKCU, 'SOFTWARE\GRAPHISOFT\ARCHICAD 27.0.0', 'InstallLocation', ArchiCAD27Path);
+    Result := RegQueryStringValue(HKCU, 'SOFTWARE\GRAPHISOFT\ARCHICAD 29.0.0', 'InstallLocation', ArchiCAD29Path);
 end;
 
-function ArchiCAD26Installed: Boolean;
+function GetArchiCAD29AddOnsPath(Param: String): String;
 begin
-  Result := RegQueryStringValue(HKLM, 'SOFTWARE\GRAPHISOFT\ARCHICAD 26.0.0', 'InstallLocation', ArchiCAD26Path);
-  if not Result then
-    Result := RegQueryStringValue(HKCU, 'SOFTWARE\GRAPHISOFT\ARCHICAD 26.0.0', 'InstallLocation', ArchiCAD26Path);
-end;
-
-function ArchiCAD25Installed: Boolean;
-begin
-  Result := RegQueryStringValue(HKLM, 'SOFTWARE\GRAPHISOFT\ARCHICAD 25.0.0', 'InstallLocation', ArchiCAD25Path);
-  if not Result then
-    Result := RegQueryStringValue(HKCU, 'SOFTWARE\GRAPHISOFT\ARCHICAD 25.0.0', 'InstallLocation', ArchiCAD25Path);
-end;
-
-function GetArchiCAD27AddOnsPath(Param: String): String;
-begin
-  if ArchiCAD27Installed then
-    Result := ArchiCAD27Path + '\Add-Ons'
-  else
-    Result := '';
-end;
-
-function GetArchiCAD26AddOnsPath(Param: String): String;
-begin
-  if ArchiCAD26Installed then
-    Result := ArchiCAD26Path + '\Add-Ons'
-  else
-    Result := '';
-end;
-
-function GetArchiCAD25AddOnsPath(Param: String): String;
-begin
-  if ArchiCAD25Installed then
-    Result := ArchiCAD25Path + '\Add-Ons'
+  if ArchiCAD29Installed then
+    Result := ArchiCAD29Path + '\Add-Ons'
   else
     Result := '';
 end;
@@ -123,7 +83,7 @@ function InitializeSetup: Boolean;
 var
   AnyArchiCADFound: Boolean;
 begin
-  AnyArchiCADFound := ArchiCAD27Installed or ArchiCAD26Installed or ArchiCAD25Installed;
+  AnyArchiCADFound := ArchiCAD29Installed;
   
   if not AnyArchiCADFound then
   begin
