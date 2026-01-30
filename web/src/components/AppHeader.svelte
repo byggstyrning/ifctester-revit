@@ -3,7 +3,7 @@
     import * as Dialog from "$lib/components/ui/dialog";
     import * as IDS from "$src/modules/api/ids.svelte.js";
     import * as API from "$src/modules/api/api.svelte.js";
-    import { error, success, info } from "$src/modules/utils/toast.svelte.js";
+    import { error, success, info, idsValidationError } from "$src/modules/utils/toast.svelte.js";
 
     let { isOpen = false } = $props();
 
@@ -50,7 +50,13 @@
             success('Audit completed successfully');
         } catch (err) {
             console.error("Audit failed: ", err);
-            error(`Audit failed: check console for details`);
+            // Check if it's an IDS validation error
+            const errorMessage = err?.message || err?.toString() || String(err);
+            if (errorMessage.includes('XMLSchema') || errorMessage.includes('xmlschema') || errorMessage.includes('IDS')) {
+                idsValidationError(err);
+            } else {
+                error(`Audit failed: check console for details`);
+            }
         }
     }
 </script>
@@ -94,6 +100,7 @@
             </Menubar.Menu>
         </Menubar.Root>
     </div>
+    <div class="notice">With Love from Byggstyrning <span aria-label="heart" title="heart">❤️</span></div>
 </header>
 
 <!-- About Dialog -->
