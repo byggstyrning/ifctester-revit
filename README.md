@@ -50,18 +50,37 @@ ifctester/
 │   ├── IfcTesterRevit.iss    # Revit installer
 │   └── IfcTesterArchiCAD.iss # ArchiCAD installer
 ├── scripts/             # Build and deployment scripts
-│   ├── deploy.ps1       # Revit deployment
-│   └── build-archicad.ps1 # ArchiCAD build
+│   ├── dev.ps1          # Interactive dev menu
+│   ├── revit/           # Revit build scripts
+│   ├── archicad/        # ArchiCAD build scripts
+│   ├── web/             # Web app build scripts
+│   └── utils/           # Shared utilities
 └── IfcTester.sln        # Combined Visual Studio solution
 ```
 
 ## Quick Start
 
+### Interactive Development Menu
+
+The easiest way to build and deploy is using the interactive dev menu:
+
+```powershell
+.\scripts\dev.ps1
+```
+
+This provides a menu-driven interface for all build and deploy operations.
+
 ### Revit Plugin
 
 ```powershell
-# Build and deploy for Revit 2025
-.\scripts\deploy.ps1 -Configuration "Release R25"
+# Build only
+.\scripts\revit\build.ps1 -Configuration "Debug R25"
+
+# Build and deploy to Revit Add-ins folder
+.\scripts\revit\deploy.ps1 -Configuration "Debug R25"
+
+# Build release installer
+.\scripts\revit\installer.ps1
 ```
 
 See [Revit Plugin Documentation](revit/README.md) for detailed instructions.
@@ -69,11 +88,17 @@ See [Revit Plugin Documentation](revit/README.md) for detailed instructions.
 ### ArchiCAD Add-On
 
 ```powershell
-# Set ArchiCAD API DevKit path
-$env:ARCHICAD_API_DEVKIT = "C:\Program Files\GRAPHISOFT\API Development Kit 27"
+# Build only
+.\scripts\archicad\build.ps1 -Configuration Release
 
-# Build for ArchiCAD 27
-.\scripts\build-archicad.ps1 -Configuration Release -ArchiCADVersion 27
+# Build and deploy to ArchiCAD Add-Ons folder
+.\scripts\archicad\deploy.ps1 -Configuration Release
+
+# Check add-on status
+.\scripts\archicad\status.ps1
+
+# Build release installer
+.\scripts\archicad\installer.ps1
 ```
 
 See [ArchiCAD Add-On Documentation](archicad/README.md) for detailed instructions.
@@ -117,6 +142,10 @@ Both plugins expose a local HTTP API for communication with the web interface:
 The web application is shared between all plugins:
 
 ```powershell
+# Using the build script (recommended)
+.\scripts\web\build.ps1
+
+# Or manually
 cd web
 npm install
 npm run build
@@ -124,23 +153,15 @@ npm run build
 
 The built files in `web/dist/` are embedded in each plugin.
 
-## Installers
-
-### Creating Installers
-
-1. **Revit Installer**:
-   ```powershell
-   # Requires Inno Setup
-   iscc installer\IfcTesterRevit.iss
-   ```
-
-2. **ArchiCAD Installer**:
-   ```powershell
-   # Requires Inno Setup
-   iscc installer\IfcTesterArchiCAD.iss
-   ```
-
 ## Development
+
+### Interactive Dev Menu
+
+The quickest way to get started is the interactive dev menu:
+
+```powershell
+.\scripts\dev.ps1
+```
 
 ### Web Application Development
 
@@ -150,6 +171,29 @@ npm run dev
 ```
 
 The dev server runs at `http://localhost:5173/`. Plugins can be configured to use this URL during development.
+
+## Build Scripts Reference
+
+All scripts are in the `scripts/` folder with a consistent structure:
+
+| Script | Description |
+|--------|-------------|
+| `dev.ps1` | Interactive menu for all dev tasks |
+| `revit/build.ps1` | Build Revit plugin |
+| `revit/deploy.ps1` | Build + deploy to Revit Add-ins |
+| `revit/installer.ps1` | Build release installer |
+| `archicad/build.ps1` | Build ArchiCAD add-on |
+| `archicad/deploy.ps1` | Build + deploy to ArchiCAD Add-Ons |
+| `archicad/installer.ps1` | Build release installer |
+| `archicad/status.ps1` | Check add-on installation & API status |
+| `web/build.ps1` | Build web application |
+| `utils/create-certificate.ps1` | Create code signing certificate |
+
+### Common Parameters
+
+- `-Configuration`: Build configuration (`Debug R25`, `Release R26`, etc.)
+- `-SkipBuild`: Skip build step (deploy only)
+- `-SkipWebBuild`: Skip web app build
 
 ### Debugging
 

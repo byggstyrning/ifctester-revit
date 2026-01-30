@@ -127,7 +127,7 @@ foreach ($package in $packages) {
     }
     
     if ($existingFile) {
-        Write-Host "✓ $($package.Name) already exists ($(Split-Path $existingFile -Leaf)), skipping..." -ForegroundColor Green
+        Write-Host "[OK] $($package.Name) already exists ($(Split-Path $existingFile -Leaf)), skipping..." -ForegroundColor Green
         continue
     }
     
@@ -147,12 +147,12 @@ foreach ($package in $packages) {
             
             if (Test-Path $filePath) {
                 $fileSize = (Get-Item $filePath).Length / 1KB
-                Write-Host "  ✓ Downloaded $($package.Name) ($([math]::Round($fileSize, 2)) KB)" -ForegroundColor Green
+                Write-Host "  [OK] Downloaded $($package.Name) ($([math]::Round($fileSize, 2)) KB)" -ForegroundColor Green
                 $downloaded = $true
                 break
             }
         } catch {
-            Write-Host "  ✗ Failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
+            Write-Host "  [X] Failed: $($_.Exception.Message)" -ForegroundColor DarkYellow
             if (Test-Path $filePath) {
                 Remove-Item $filePath -Force -ErrorAction SilentlyContinue
             }
@@ -161,10 +161,10 @@ foreach ($package in $packages) {
     
     if (-not $downloaded) {
         if ($package.Optional) {
-            Write-Host "  ⚠ $($package.Name) is optional and could not be downloaded. It may need to be provided manually." -ForegroundColor Yellow
+            Write-Host "  [!] $($package.Name) is optional and could not be downloaded. It may need to be provided manually." -ForegroundColor Yellow
             Write-Host "  Expected filename: $($package.FileName)" -ForegroundColor Gray
         } else {
-            Write-Host "  ✗ Failed to download $($package.Name) from all available URLs" -ForegroundColor Red
+            Write-Host "  [X] Failed to download $($package.Name) from all available URLs" -ForegroundColor Red
         }
     }
 }
@@ -174,4 +174,3 @@ Write-Host "========================================" -ForegroundColor Cyan
 Write-Host "Download Complete" -ForegroundColor Green
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
-
