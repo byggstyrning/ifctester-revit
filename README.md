@@ -1,4 +1,4 @@
-# IfcTester for BIM Applications
+# IfcTester for Revit and ArchiCAD
 
 A suite of plugins that integrate the IfcTester web application with major BIM software, providing a complete solution for IDS (Information Delivery Specification) authoring and auditing within your design environment.
 
