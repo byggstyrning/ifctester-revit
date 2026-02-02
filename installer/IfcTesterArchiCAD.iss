@@ -24,7 +24,7 @@ DefaultGroupName={#MyAppName}
 AllowNoIcons=yes
 LicenseFile=..\LICENSE
 OutputDir=..\dist
-OutputBaseFilename=IfcTesterArchiCAD-Setup-v{#MyAppVersion}
+OutputBaseFilename=IfcTesterArchiCAD-Setup-win-v{#MyAppVersion}
 ; SetupIconFile requires .ico format - using default
 Compression=lzma2/ultra64
 SolidCompression=yes

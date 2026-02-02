@@ -195,7 +195,8 @@ cd ..
 | Installer | Location | Size |
 |-----------|----------|------|
 | Revit | `dist\IfcTesterRevit-Setup-v1.1.0.exe` | ~45 MB |
-| ArchiCAD | `dist\IfcTesterArchiCAD-Setup-v1.1.0.exe` | ~35 MB |
+| ArchiCAD (Windows) | `dist\IfcTesterArchiCAD-Setup-win-v1.1.0.exe` | ~35 MB |
+| ArchiCAD (macOS) | `dist\IfcTesterArchiCAD-Setup-mac-v1.1.0.dmg` | ~45 MB |
 
 ## Installation Paths
 
