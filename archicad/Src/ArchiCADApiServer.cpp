@@ -14,6 +14,12 @@
 #include <cstdio>
 #include <chrono>
 #include <cctype>
+#include <cstring>  // for memset
+
+#ifndef _WIN32
+// macOS: Grand Central Dispatch for main thread callbacks
+#include <dispatch/dispatch.h>
+#endif
 
 namespace IfcTester {
 
@@ -50,6 +56,9 @@ ArchiCADApiServer::ArchiCADApiServer(int port)
             ACAPI_WriteReport("IfcTester API Server: Winsock initialized", false);
         }
     }
+#else
+    // POSIX sockets don't need initialization
+    ACAPI_WriteReport("IfcTester API Server: POSIX sockets ready", false);
 #endif
 }
 
@@ -95,6 +104,8 @@ bool ArchiCADApiServer::Start()
 #ifdef _WIN32
         int error = WSAGetLastError();
         ACAPI_WriteReport("IfcTester API Server: Failed to create socket (error %d)", false, error);
+#else
+        ACAPI_WriteReport("IfcTester API Server: Failed to create socket (error %d)", false, errno);
 #endif
         return false;
     }
@@ -105,6 +116,7 @@ bool ArchiCADApiServer::Start()
     
     // Bind to port
     sockaddr_in serverAddr;
+    memset(&serverAddr, 0, sizeof(serverAddr));
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
     serverAddr.sin_port = htons(port);
@@ -113,6 +125,8 @@ bool ArchiCADApiServer::Start()
 #ifdef _WIN32
         int error = WSAGetLastError();
         ACAPI_WriteReport("IfcTester API Server: Failed to bind to port %d (error %d). Port may be in use.", false, port, error);
+#else
+        ACAPI_WriteReport("IfcTester API Server: Failed to bind to port %d (error %d). Port may be in use.", false, port, errno);
 #endif
         closesocket(serverSocket);
         serverSocket = INVALID_SOCKET;
@@ -124,6 +138,8 @@ bool ArchiCADApiServer::Start()
 #ifdef _WIN32
         int error = WSAGetLastError();
         ACAPI_WriteReport("IfcTester API Server: Failed to listen on port %d (error %d)", false, port, error);
+#else
+        ACAPI_WriteReport("IfcTester API Server: Failed to listen on port %d (error %d)", false, port, errno);
 #endif
         closesocket(serverSocket);
         serverSocket = INVALID_SOCKET;
@@ -136,6 +152,15 @@ bool ArchiCADApiServer::Start()
     if (ioctlsocket(serverSocket, FIONBIO, &mode) == SOCKET_ERROR) {
         int error = WSAGetLastError();
         ACAPI_WriteReport("IfcTester API Server: Failed to set non-blocking mode (error %d)", false, error);
+        closesocket(serverSocket);
+        serverSocket = INVALID_SOCKET;
+        return false;
+    }
+#else
+    // macOS/POSIX: Use fcntl for non-blocking mode
+    int flags = fcntl(serverSocket, F_GETFL, 0);
+    if (flags == -1 || fcntl(serverSocket, F_SETFL, flags | O_NONBLOCK) == -1) {
+        ACAPI_WriteReport("IfcTester API Server: Failed to set non-blocking mode (error %d)", false, errno);
         closesocket(serverSocket);
         serverSocket = INVALID_SOCKET;
         return false;
@@ -213,7 +238,11 @@ void ArchiCADApiServer::ServerLoop()
                 int error = WSAGetLastError();
                 if (error != WSAEINTR) {
                     ACAPI_WriteReport("IfcTester API Server: select() error %d", false, error);
-                    // If select fails, break the loop
+                    break;
+                }
+#else
+                if (errno != EINTR) {
+                    ACAPI_WriteReport("IfcTester API Server: select() error %d", false, errno);
                     break;
                 }
 #endif
@@ -222,7 +251,7 @@ void ArchiCADApiServer::ServerLoop()
             
             if (selectResult > 0 && FD_ISSET(serverSocket, &readSet)) {
                 sockaddr_in clientAddr;
-                int clientAddrLen = sizeof(clientAddr);
+                socklen_t clientAddrLen = sizeof(clientAddr);
                 
                 SOCKET clientSocket = accept(serverSocket, (sockaddr*)&clientAddr, &clientAddrLen);
                 
@@ -232,12 +261,25 @@ void ArchiCADApiServer::ServerLoop()
 #ifdef _WIN32
                     u_long mode = 0; // 0 = blocking mode
                     ioctlsocket(clientSocket, FIONBIO, &mode);
-#endif
                     
-                    // Set socket timeout
+                    // Set socket timeout (Windows uses DWORD in milliseconds)
                     DWORD timeout = 5000;
                     setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
                     setsockopt(clientSocket, SOL_SOCKET, SO_SNDTIMEO, (const char*)&timeout, sizeof(timeout));
+#else
+                    // macOS/POSIX: Ensure blocking mode
+                    int flags = fcntl(clientSocket, F_GETFL, 0);
+                    if (flags != -1) {
+                        fcntl(clientSocket, F_SETFL, flags & ~O_NONBLOCK);
+                    }
+                    
+                    // Set socket timeout (POSIX uses struct timeval)
+                    struct timeval tv;
+                    tv.tv_sec = 5;
+                    tv.tv_usec = 0;
+                    setsockopt(clientSocket, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv));
+                    setsockopt(clientSocket, SOL_SOCKET, SO_SNDTIMEO, &tv, sizeof(tv));
+#endif
                     
                     try {
                         // Read request
@@ -273,11 +315,13 @@ void ArchiCADApiServer::ServerLoop()
 #ifdef _WIN32
                             int error = WSAGetLastError();
                             ACAPI_WriteReport("IfcTester API Server: Failed to send response (error %d)", false, error);
+#else
+                            ACAPI_WriteReport("IfcTester API Server: Failed to send response (error %d)", false, errno);
 #endif
                         }
                     } else if (bytesRead == 0) {
                         // Client closed connection
-                        ACAPI_WriteReport("IfcTester API Server: Client closed connection", false);
+                        // This is normal, don't log it
                     } else {
                         // Error reading (bytesRead < 0)
 #ifdef _WIN32
@@ -286,6 +330,12 @@ void ArchiCADApiServer::ServerLoop()
                         // WSAETIMEDOUT is expected when timeout occurs
                         if (error != WSAETIMEDOUT && error != WSAEWOULDBLOCK) {
                             ACAPI_WriteReport("IfcTester API Server: Error reading request (error %d)", false, error);
+                        }
+#else
+                        // EAGAIN/EWOULDBLOCK shouldn't happen with blocking sockets
+                        // ETIMEDOUT is expected when timeout occurs
+                        if (errno != ETIMEDOUT && errno != EAGAIN && errno != EWOULDBLOCK) {
+                            ACAPI_WriteReport("IfcTester API Server: Error reading request (error %d)", false, errno);
                         }
 #endif
                     }
@@ -517,11 +567,16 @@ HttpResponse ArchiCADApiServer::HandleSelectByGuid(const GS::UniString& guid)
 
 bool ArchiCADApiServer::QueueSelectionRequest(const GS::UniString& guid)
 {
-    // Check if message window is set up
+#ifdef _WIN32
+    // Check if message window is set up (Windows only)
     if (messageWindow == nullptr) {
         ACAPI_WriteReport("IfcTester API Server: Message window not initialized, cannot queue selection", false);
         return false;
     }
+#else
+    // macOS: GCD is always available, no setup needed
+    ACAPI_WriteReport("IfcTester API Server: Queuing selection request for macOS (GCD)", false);
+#endif
     
     // Create request with synchronization primitives
     std::mutex reqMutex;
@@ -541,7 +596,19 @@ bool ArchiCADApiServer::QueueSelectionRequest(const GS::UniString& guid)
     }
     
     // Post message to main thread to process the queue
+#ifdef _WIN32
     PostMessage(messageWindow, WM_IFCTESTER_PROCESS_QUEUE, 0, 0);
+#else
+    // macOS: Use Grand Central Dispatch to process on main thread
+    // We need to capture the server instance pointer for the dispatch block
+    ArchiCADApiServer* server = this;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (server != nullptr) {
+            ACAPI_WriteReport("IfcTester: Processing selection queue via GCD on main thread", false);
+            server->ProcessSelectionQueue();
+        }
+    });
+#endif
     
     // Wait for the request to be processed (with timeout)
     {
@@ -677,10 +744,15 @@ std::string ArchiCADApiServer::GenerateJobId()
 
 std::string ArchiCADApiServer::QueueExportRequest(const GS::UniString& configName)
 {
+#ifdef _WIN32
     if (messageWindow == nullptr) {
         ACAPI_WriteReport("IfcTester API Server: Message window not initialized, cannot queue export", false);
         return "";
     }
+#else
+    // macOS: GCD is always available, no setup needed
+    ACAPI_WriteReport("IfcTester API Server: Queuing export request for macOS (GCD)", false);
+#endif
     
     // Generate unique job ID
     std::string jobId = GenerateJobId();
@@ -699,7 +771,18 @@ std::string ArchiCADApiServer::QueueExportRequest(const GS::UniString& configNam
     }
     
     // Post message to main thread to process queue (non-blocking)
+#ifdef _WIN32
     PostMessage(messageWindow, WM_IFCTESTER_PROCESS_EXPORT, 0, 0);
+#else
+    // macOS: Use Grand Central Dispatch to process on main thread
+    ArchiCADApiServer* server = this;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (server != nullptr) {
+            ACAPI_WriteReport("IfcTester: Processing export queue via GCD on main thread", false);
+            server->ProcessExportQueue();
+        }
+    });
+#endif
     
     ACAPI_WriteReport("IfcTester API Server: Queued export job %s for config: %s", false, 
         jobId.c_str(), configName.ToCStr().Get());
@@ -948,26 +1031,36 @@ HttpResponse ArchiCADApiServer::HandleStaticFile(const GS::UniString& path)
         return CreateErrorResponse(500, GS::UniString("WebApp path not configured"));
     }
     
+    // Platform-specific path separator
+#ifdef _WIN32
+    const char pathSep = '\\';
+#else
+    const char pathSep = '/';
+#endif
+    
     // Determine the file path
     GS::UniString filePath = webAppPath;
     
     // Handle root path -> serve index.html
     if (path == "/" || path.IsEmpty()) {
-        filePath += "\\index.html";
+        filePath += pathSep;
+        filePath += "index.html";
     } else {
-        // Convert URL path to file path (replace / with \)
+        // Convert URL path to file path
         GS::UniString relativePath = path;
         if (relativePath.BeginsWith("/")) {
             relativePath = relativePath.GetSubstring(1, relativePath.GetLength() - 1);
         }
         
-        // Replace forward slashes with backslashes for Windows
+        // Convert slashes to platform-specific separator
         std::string pathStr = relativePath.ToCStr().Get();
+#ifdef _WIN32
         for (char& c : pathStr) {
             if (c == '/') c = '\\';
         }
+#endif
         
-        filePath += "\\";
+        filePath += pathSep;
         filePath += GS::UniString(pathStr.c_str());
     }
     
@@ -981,7 +1074,9 @@ HttpResponse ArchiCADApiServer::HandleStaticFile(const GS::UniString& path)
     std::ifstream file(filePathStr, std::ios::binary);
     if (!file) {
         // Try with index.html for SPA routing (client-side routing support)
-        GS::UniString indexPath = webAppPath + "\\index.html";
+        GS::UniString indexPath = webAppPath;
+        indexPath += pathSep;
+        indexPath += "index.html";
         file.open(indexPath.ToCStr().Get(), std::ios::binary);
         if (!file) {
             return CreateErrorResponse(404, GS::UniString("File not found"));

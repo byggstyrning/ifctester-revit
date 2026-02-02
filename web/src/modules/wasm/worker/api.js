@@ -85,7 +85,20 @@ export async function loadIfc(ifcData) {
     const ifc_id = id();
     const path = `/tmp/${encodeURIComponent(ifc_id)}.ifc`;
 
-    pyodide.FS.writeFile(path, new Uint8Array(ifcData));
+    // Handle different input types: ArrayBuffer, Uint8Array, or regular array
+    let uint8Data;
+    if (ifcData instanceof ArrayBuffer) {
+        uint8Data = new Uint8Array(ifcData);
+    } else if (ifcData instanceof Uint8Array) {
+        uint8Data = ifcData;
+    } else if (Array.isArray(ifcData)) {
+        // Fallback for regular arrays (legacy support)
+        uint8Data = new Uint8Array(ifcData);
+    } else {
+        throw new Error('Invalid IFC data type: expected ArrayBuffer, Uint8Array, or Array');
+    }
+    
+    pyodide.FS.writeFile(path, uint8Data);
     const ifc = await pyodide.runPythonAsync(`
         import ifcopenshell
 

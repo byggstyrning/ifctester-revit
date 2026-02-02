@@ -97,10 +97,9 @@ export async function loadIfc(file) {
         IFCModels.isLoading = true;
         
         const arrayBuffer = await file.arrayBuffer();
-        const uint8Array = new Uint8Array(arrayBuffer);
         
-        // Load IFC model
-        const ifcId = await wasm.loadIfc(Array.from(uint8Array));
+        // Load IFC model - pass ArrayBuffer directly for efficiency with large files
+        const ifcId = await wasm.loadIfc(arrayBuffer);
         
         // Add to models list
         const model = {

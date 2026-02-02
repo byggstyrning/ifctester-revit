@@ -26,7 +26,8 @@ static std::unique_ptr<IfcTester::BrowserPalette> gBrowserPalette;
 // Global API server instance
 static std::unique_ptr<IfcTester::ArchiCADApiServer> gApiServer;
 
-// Hidden message window for thread-safe communication
+#ifdef _WIN32
+// Hidden message window for thread-safe communication (Windows only)
 static HWND gMessageWindow = nullptr;
 static const wchar_t* MESSAGE_WINDOW_CLASS = L"IfcTesterMessageWindow";
 
@@ -120,6 +121,12 @@ void DestroyMessageWindow()
     
     UnregisterClassW(MESSAGE_WINDOW_CLASS, GetModuleHandle(nullptr));
 }
+
+#else
+// macOS: No message window needed - we use direct calls or GCD
+bool CreateMessageWindow() { return true; }
+void DestroyMessageWindow() {}
+#endif
 
 /**
  * Menu command handler
@@ -607,20 +614,25 @@ GSErrCode Initialize (void)
     // Log add-on version and build info
     ACAPI_WriteReport("IfcTester ArchiCAD Add-On v%s (Built: %s %s)", false, AddOnVersion, BuildDate, BuildTime);
     
-    // Create the hidden message window for thread-safe communication
+    // Start the API server for web communication
+    gApiServer = std::make_unique<IfcTester::ArchiCADApiServer>(ApiServerPort);
+    
+#ifdef _WIN32
+    // Create the hidden message window for thread-safe communication (Windows only)
     // This must be done on the main thread before starting the API server
     if (!CreateMessageWindow()) {
         ACAPI_WriteReport("IfcTester: Warning - Failed to create message window. Selection from web app may not work.", false);
     }
-    
-    // Start the API server for web communication
-    gApiServer = std::make_unique<IfcTester::ArchiCADApiServer>(ApiServerPort);
     
     // Set the message window handle on the server for thread-safe communication
     if (gMessageWindow != nullptr) {
         gApiServer->SetMessageWindowHandle(gMessageWindow);
         ACAPI_WriteReport("IfcTester: Message window handle set on API server", false);
     }
+#else
+    // macOS: No message window needed - using Grand Central Dispatch for main thread callbacks
+    ACAPI_WriteReport("IfcTester: Running on macOS - using GCD for main thread callbacks", false);
+#endif
     
     // Get the add-on's location and set WebApp path
     IO::Location addOnLocation;
@@ -641,19 +653,27 @@ GSErrCode Initialize (void)
         webAppLocation1.AppendToLocal(IO::Name("WebApp"));
         webAppLocation1.ToPath(&webAppPath);
         
+        // Platform-specific path separator
+#ifdef _WIN32
+        const char* pathSep = "\\";
+#else
+        const char* pathSep = "/";
+#endif
+        
         ACAPI_WriteReport("IfcTester: Trying WebApp path (option 1): %s", false, webAppPath.ToCStr().Get());
         GS::UniString indexPath1 = webAppPath;
-        indexPath1 += "\\index.html";
+        indexPath1 += pathSep;
+        indexPath1 += "index.html";
         std::ifstream testFile1(indexPath1.ToCStr().Get());
         if (testFile1) {
             testFile1.close();
             found = true;
             ACAPI_WriteReport("IfcTester: WebApp folder found at: %s", false, webAppPath.ToCStr().Get());
         } else {
-            // Option 2: WebApp folder in Build\Release (for development)
-            // Try to find Build\Release\WebApp relative to the .apx location
+            // Option 2: WebApp folder in Build/Release (for development)
+            // Try to find Build/Release/WebApp relative to the .apx/.bundle location
             IO::Location buildLocation(addOnLocation);
-            buildLocation.DeleteLastLocalName(); // Remove .apx filename
+            buildLocation.DeleteLastLocalName(); // Remove .apx filename or go up from bundle
             buildLocation.DeleteLastLocalName(); // Go up one more level
             buildLocation.AppendToLocal(IO::Name("Build"));
             buildLocation.AppendToLocal(IO::Name("Release"));
@@ -662,13 +682,35 @@ GSErrCode Initialize (void)
             
             ACAPI_WriteReport("IfcTester: Trying WebApp path (option 2): %s", false, webAppPath.ToCStr().Get());
             GS::UniString indexPath2 = webAppPath;
-            indexPath2 += "\\index.html";
+            indexPath2 += pathSep;
+            indexPath2 += "index.html";
             std::ifstream testFile2(indexPath2.ToCStr().Get());
             if (testFile2) {
                 testFile2.close();
                 found = true;
                 ACAPI_WriteReport("IfcTester: WebApp folder found at: %s", false, webAppPath.ToCStr().Get());
             }
+#ifndef _WIN32
+            // Option 3 (macOS only): WebApp folder inside bundle at Contents/Resources/WebApp
+            if (!found) {
+                IO::Location bundleLocation(addOnLocation);
+                bundleLocation.AppendToLocal(IO::Name("Contents"));
+                bundleLocation.AppendToLocal(IO::Name("Resources"));
+                bundleLocation.AppendToLocal(IO::Name("WebApp"));
+                bundleLocation.ToPath(&webAppPath);
+                
+                ACAPI_WriteReport("IfcTester: Trying WebApp path (option 3 - bundle): %s", false, webAppPath.ToCStr().Get());
+                GS::UniString indexPath3 = webAppPath;
+                indexPath3 += pathSep;
+                indexPath3 += "index.html";
+                std::ifstream testFile3(indexPath3.ToCStr().Get());
+                if (testFile3) {
+                    testFile3.close();
+                    found = true;
+                    ACAPI_WriteReport("IfcTester: WebApp folder found at: %s", false, webAppPath.ToCStr().Get());
+                }
+            }
+#endif
         }
         
         if (found) {
@@ -690,7 +732,11 @@ GSErrCode Initialize (void)
         ACAPI_WriteReport("IfcTester: Failed to start API server on port %d", false, ApiServerPort);
     } else {
         ACAPI_WriteReport("IfcTester: API server started on http://127.0.0.1:%d", false, ApiServerPort);
-        ACAPI_WriteReport("IfcTester: Thread-safe selection queue enabled via Windows messages", false);
+#ifdef _WIN32
+        ACAPI_WriteReport("IfcTester: Thread-safe queue processing enabled via Windows messages", false);
+#else
+        ACAPI_WriteReport("IfcTester: Thread-safe queue processing enabled via Grand Central Dispatch", false);
+#endif
     }
 
     return NoError;
