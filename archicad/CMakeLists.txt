@@ -43,27 +43,32 @@ function (AddGSModuleLinkLibrary target library)
 	if (WIN32)
 		file (GLOB libs "${library}/Win/*.lib")
 		foreach (lib ${libs})
-			target_link_libraries (${target} ${lib})
+			target_link_libraries (${target} PUBLIC ${lib})
 		endforeach ()
 	elseif (APPLE)
-		# Mac: Link frameworks from Frameworks directory
+		# Mac: Link frameworks
 		if (IS_DIRECTORY "${library}")
-			# Link frameworks (standard macOS framework linking)
-			file (GLOB frameworks "${library}/*.framework")
-			foreach (framework ${frameworks})
-				get_filename_component (framework_name ${framework} NAME_WE)
-				# Use proper CMake framework linking
-				target_link_directories (${target} PRIVATE "${library}")
-				target_link_libraries (${target} PRIVATE "-framework" ${framework_name})
-			endforeach ()
-			# Also check for .a static libraries
-			file (GLOB libs "${library}/*.a")
-			foreach (lib ${libs})
-				target_link_libraries (${target} ${lib})
-			endforeach ()
+			# Check if library is itself a .framework folder
+			get_filename_component (lib_name "${library}" NAME)
+			if ("${lib_name}" MATCHES "\\.framework$")
+				# This is a framework - link it directly using full path
+				# This is the most reliable way to link frameworks in CMake
+				target_link_libraries (${target} PUBLIC "${library}")
+			else ()
+				# This is a directory containing frameworks
+				file (GLOB frameworks "${library}/*.framework")
+				foreach (framework ${frameworks})
+					target_link_libraries (${target} PUBLIC "${framework}")
+				endforeach ()
+				# Also check for .a static libraries
+				file (GLOB libs "${library}/*.a")
+				foreach (lib ${libs})
+					target_link_libraries (${target} PUBLIC ${lib})
+				endforeach ()
+			endif ()
 		endif ()
 	else ()
-		target_link_libraries (${target} ${library})
+		target_link_libraries (${target} PUBLIC ${library})
 	endif ()
 endfunction ()
 
@@ -86,6 +91,12 @@ else ()
 	if (CMAKE_GENERATOR STREQUAL Xcode)
 		set (CMAKE_OSX_ARCHITECTURES "$(ARCHS_STANDARD)" CACHE INTERNAL "" FORCE)
 		set (CMAKE_XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "NO")
+		# Disable automatic code signing for development builds
+		# The .whl files in WebApp cannot be signed, so we disable signing entirely
+		# For distribution, sign manually after build or use ad-hoc signing
+		set (CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_REQUIRED "NO")
+		set (CMAKE_XCODE_ATTRIBUTE_CODE_SIGN_IDENTITY "")
+		set (CMAKE_XCODE_ATTRIBUTE_CODE_SIGNING_ALLOWED "NO")
 	endif ()
 endif ()
 
@@ -241,7 +252,7 @@ if (WIN32)
 	target_link_options (AddOn PUBLIC "${ResourceObjectsDir}/${AC_ADDON_NAME}.res")
 	target_link_options (AddOn PUBLIC /export:GetExportedFuncAddrs,@1 /export:SetImportedFuncAddrs,@2)
 	# Additional Windows libraries
-	target_link_libraries (AddOn ws2_32.lib)
+	target_link_libraries (AddOn PUBLIC ws2_32.lib)
 endif ()
 
 target_include_directories (AddOn PUBLIC
@@ -250,12 +261,12 @@ target_include_directories (AddOn PUBLIC
 )
 
 if (WIN32)
-	target_link_libraries (AddOn
+	target_link_libraries (AddOn PUBLIC
 		"${AC_API_DEVKIT_DIR}/Support/Lib/ACAP_STAT.lib"
 	)
 else ()
 	find_library (CocoaFramework Cocoa)
-	target_link_libraries (AddOn
+	target_link_libraries (AddOn PUBLIC
 		"${AC_API_DEVKIT_DIR}/Support/Lib/libACAP_STAT.a"
 		${CocoaFramework}
 	)
@@ -320,11 +331,12 @@ if (WIN32)
 		COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_LIST_DIR}/../web/dist" "$<TARGET_FILE_DIR:AddOn>/WebApp"
 	)
 else ()
-	# Mac: Copy to bundle Resources directory
+	# Mac: Copy to bundle Resources directory (using bundle root, not TARGET_FILE_DIR which is MacOS/)
+	# $<TARGET_BUNDLE_DIR:AddOn> gives us the .bundle root directory
 	add_custom_command (TARGET AddOn POST_BUILD
 		COMMENT "Copying WebApp files..."
-		COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:AddOn>/Contents/Resources/WebApp"
-		COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_LIST_DIR}/../web/dist" "$<TARGET_FILE_DIR:AddOn>/Contents/Resources/WebApp"
+		COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_BUNDLE_DIR:AddOn>/Contents/Resources/WebApp"
+		COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_LIST_DIR}/../web/dist" "$<TARGET_BUNDLE_DIR:AddOn>/Contents/Resources/WebApp"
 	)
 endif ()
 

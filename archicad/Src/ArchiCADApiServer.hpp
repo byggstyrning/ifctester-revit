@@ -18,18 +18,39 @@
 #include <map>
 #include <chrono>
 
-// Windows headers for HTTP server
+// Platform-specific headers for HTTP server
 #ifdef _WIN32
-#include <winsock2.h>
-#include <ws2tcpip.h>
-#pragma comment(lib, "ws2_32.lib")
+    #include <winsock2.h>
+    #include <ws2tcpip.h>
+    #pragma comment(lib, "ws2_32.lib")
+#else
+    // macOS / POSIX
+    #include <sys/socket.h>
+    #include <sys/types.h>
+    #include <netinet/in.h>
+    #include <arpa/inet.h>
+    #include <unistd.h>
+    #include <fcntl.h>
+    #include <errno.h>
+    
+    // Define Windows-like socket types for cross-platform compatibility
+    #define INVALID_SOCKET (-1)
+    #define SOCKET_ERROR (-1)
+    #define closesocket(s) close(s)
+    typedef int SOCKET;
 #endif
 
 namespace IfcTester {
 
-// Custom Windows messages for main-thread processing
-constexpr UINT WM_IFCTESTER_PROCESS_QUEUE = WM_USER + 100;
-constexpr UINT WM_IFCTESTER_PROCESS_EXPORT = WM_USER + 101;
+// Custom Windows messages for main-thread processing (Windows only)
+#ifdef _WIN32
+    constexpr UINT WM_IFCTESTER_PROCESS_QUEUE = WM_USER + 100;
+    constexpr UINT WM_IFCTESTER_PROCESS_EXPORT = WM_USER + 101;
+#else
+    // On macOS, we use condition variables instead of Windows messages
+    constexpr int WM_IFCTESTER_PROCESS_QUEUE = 100;
+    constexpr int WM_IFCTESTER_PROCESS_EXPORT = 101;
+#endif
 
 /**
  * Selection request structure for thread-safe queue
@@ -152,13 +173,15 @@ public:
     
     /**
      * Set the message window handle (called from main thread during init)
+     * On macOS, this is not used - we use condition variables instead
      */
+#ifdef _WIN32
     void SetMessageWindowHandle(HWND hwnd) { messageWindow = hwnd; }
-    
-    /**
-     * Get the message window handle
-     */
     HWND GetMessageWindowHandle() const { return messageWindow; }
+#else
+    void SetMessageWindowHandle(void* hwnd) { (void)hwnd; /* Not used on macOS */ }
+    void* GetMessageWindowHandle() const { return nullptr; }
+#endif
     
     /**
      * Process pending selection requests
@@ -312,8 +335,13 @@ private:
     std::map<std::string, ExportJob> exportJobs;
     std::mutex exportJobsMutex;
     
-    // Hidden window handle for receiving messages on the main thread
+    // Hidden window handle for receiving messages on the main thread (Windows only)
+#ifdef _WIN32
     HWND messageWindow;
+#else
+    // On macOS, we don't need a message window - we use direct calls or GCD
+    void* messageWindow; // Unused on macOS
+#endif
     
     // Path to the WebApp folder for static file serving
     GS::UniString webAppPath;

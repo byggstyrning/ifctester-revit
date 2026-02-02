@@ -171,9 +171,44 @@ class WASMModule extends EventEmitter {
 
     /**
      * Load an IFC file. Returns a unique ID for the loaded file.
+     * @param {ArrayBuffer|Uint8Array} ifcData - The IFC file data
      */
     async loadIfc(ifcData) {
-        return this._apiCall('loadIfc', ifcData);
+        // Convert to ArrayBuffer for efficient transfer to worker
+        let buffer;
+        if (ifcData instanceof ArrayBuffer) {
+            buffer = ifcData;
+        } else if (ifcData instanceof Uint8Array) {
+            buffer = ifcData.buffer.slice(ifcData.byteOffset, ifcData.byteOffset + ifcData.byteLength);
+        } else if (Array.isArray(ifcData)) {
+            buffer = new Uint8Array(ifcData).buffer;
+        } else {
+            throw new Error('Invalid IFC data type');
+        }
+        
+        // Use special transfer method for large binary data
+        return this._apiCallWithTransfer('loadIfc', buffer);
+    }
+    
+    /**
+     * Send message with transferable ArrayBuffer for efficiency
+     */
+    async _apiCallWithTransfer(method, buffer) {
+        if (!this.ready) await this.init();
+        if (!this.worker) throw new Error('Worker not initialized');
+
+        const id = this.id();
+
+        return new Promise((resolve, reject) => {
+            this.pendingMessages.set(id, { resolve, reject });
+            
+            // Transfer the ArrayBuffer to the worker (zero-copy)
+            this.worker.postMessage({
+                type: MessageType.API_CALL,
+                payload: { method, args: [buffer] },
+                id
+            }, [buffer]);
+        });
     }
 
     /**
