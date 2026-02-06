@@ -68,39 +68,46 @@ function IsRevitVersionInstalled(Year: Integer): Boolean;
 var
   InstallPath: string;
   RegKey: string;
-  SubKeyName: string;
+  YearStr: string;
 begin
   Result := False;
+  YearStr := IntToStr(Year);
   
-  // Primary method: Check HKLM\SOFTWARE\Autodesk\Revit\[Year]\Revit [Year]
-  // This is the most reliable method for detecting Revit installations
-  RegKey := 'SOFTWARE\Autodesk\Revit\' + IntToStr(Year);
-  SubKeyName := 'Revit ' + IntToStr(Year);
-  
-  if RegQueryStringValue(HKLM, RegKey + '\' + SubKeyName, 'InstallationLocation', InstallPath) then
+  // Method 1: Check if HKLM\SOFTWARE\Autodesk\Revit\[Year] key exists
+  // This is the simplest and most reliable check - if this key exists, Revit is installed
+  RegKey := 'SOFTWARE\Autodesk\Revit\' + YearStr;
+  if RegKeyExists(HKLM, RegKey) then
   begin
-    if (InstallPath <> '') and DirExists(InstallPath) then
+    Result := True;
+    Exit;
+  end;
+  
+  // Method 2: Check 32-bit registry view on 64-bit Windows (Wow6432Node)
+  RegKey := 'SOFTWARE\Wow6432Node\Autodesk\Revit\' + YearStr;
+  if RegKeyExists(HKLM, RegKey) then
+  begin
+    Result := True;
+    Exit;
+  end;
+  
+  // Method 3: Check for InstallationLocation in various subkey patterns
+  // Some Revit editions store this differently
+  RegKey := 'SOFTWARE\Autodesk\Revit\' + YearStr;
+  
+  // Try "Revit [Year]" subkey
+  if RegQueryStringValue(HKLM, RegKey + '\Revit ' + YearStr, 'InstallationLocation', InstallPath) then
+  begin
+    if InstallPath <> '' then
     begin
       Result := True;
       Exit;
     end;
   end;
   
-  // Alternative: Check for "Autodesk Revit [Year]" subkey (some editions use this)
-  if RegQueryStringValue(HKLM, RegKey + '\Autodesk Revit ' + IntToStr(Year), 'InstallationLocation', InstallPath) then
+  // Try "Autodesk Revit [Year]" subkey
+  if RegQueryStringValue(HKLM, RegKey + '\Autodesk Revit ' + YearStr, 'InstallationLocation', InstallPath) then
   begin
-    if (InstallPath <> '') and DirExists(InstallPath) then
-    begin
-      Result := True;
-      Exit;
-    end;
-  end;
-  
-  // Fallback: Check 32-bit registry on 64-bit Windows (Wow6432Node)
-  RegKey := 'SOFTWARE\Wow6432Node\Autodesk\Revit\' + IntToStr(Year);
-  if RegQueryStringValue(HKLM, RegKey + '\' + SubKeyName, 'InstallationLocation', InstallPath) then
-  begin
-    if (InstallPath <> '') and DirExists(InstallPath) then
+    if InstallPath <> '' then
     begin
       Result := True;
       Exit;
