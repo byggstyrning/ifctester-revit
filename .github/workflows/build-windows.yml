@@ -63,16 +63,12 @@ jobs:
         run: npm run build
         working-directory: web
 
-      - name: Restore NuGet packages
-        run: dotnet restore IfcTesterRevit.csproj
-        working-directory: revit
-
       - name: Build Revit plugin (R25)
-        run: dotnet build IfcTesterRevit.csproj -c "${{ github.event.inputs.build_config || 'Release' }} R25" --no-incremental
+        run: dotnet build IfcTesterRevit.csproj -c "${{ github.event.inputs.build_config || 'Release' }} R25"
         working-directory: revit
 
       - name: Build Revit plugin (R26)
-        run: dotnet build IfcTesterRevit.csproj -c "${{ github.event.inputs.build_config || 'Release' }} R26" --no-incremental
+        run: dotnet build IfcTesterRevit.csproj -c "${{ github.event.inputs.build_config || 'Release' }} R26"
         working-directory: revit
 
       - name: Verify build output (R25)
