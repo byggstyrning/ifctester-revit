@@ -2,15 +2,6 @@ name: Build Revit Plugin for Windows
 
 on:
   workflow_dispatch:
-    inputs:
-      build_config:
-        description: 'Build Configuration'
-        required: true
-        default: 'Release'
-        type: choice
-        options:
-          - 'Debug'
-          - 'Release'
   push:
     branches:
       - main
@@ -19,6 +10,7 @@ on:
     paths:
       - 'revit/**'
       - 'web/**'
+      - 'installer/**'
       - '.github/workflows/build-windows.yml'
   pull_request:
     branches:
@@ -27,6 +19,7 @@ on:
     paths:
       - 'revit/**'
       - 'web/**'
+      - 'installer/**'
       - '.github/workflows/build-windows.yml'
 
 jobs:
@@ -64,49 +57,119 @@ jobs:
         working-directory: web
 
       - name: Build Revit plugin (R25)
-        run: dotnet build IfcTesterRevit.csproj -c "${{ github.event.inputs.build_config || 'Release' }} R25"
+        run: dotnet build IfcTesterRevit.csproj -c "Release R25"
         working-directory: revit
 
       - name: Build Revit plugin (R26)
-        run: dotnet build IfcTesterRevit.csproj -c "${{ github.event.inputs.build_config || 'Release' }} R26"
+        run: dotnet build IfcTesterRevit.csproj -c "Release R26"
         working-directory: revit
 
-      - name: Verify build output (R25)
+      - name: Prepare installer staging
+        shell: pwsh
         run: |
-          $config = "${{ github.event.inputs.build_config || 'Release' }} R25"
-          $outputDir = "revit\bin\$config"
-          if (Test-Path $outputDir) {
-            Write-Host "Build successful: $outputDir"
-            Get-ChildItem $outputDir -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
-          } else {
-            Write-Error "Build output not found: $outputDir"
+          $stagingDir = "installer\staging"
+          $generatedDir = "installer\generated"
+
+          # Clean and create staging directory
+          if (Test-Path $stagingDir) { Remove-Item $stagingDir -Recurse -Force }
+          New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
+
+          # Find the R25 publish output (Nice3point creates a publish directory)
+          $r25PublishDir = "revit\bin\Release R25\publish"
+          $publishAddinDir = Get-ChildItem -Path $r25PublishDir -Directory -Filter "*addin" | Select-Object -First 1
+
+          if (-not $publishAddinDir) {
+            Write-Error "Could not find R25 publish directory under $r25PublishDir"
             exit 1
           }
-        shell: pwsh
 
-      - name: Verify build output (R26)
+          Write-Host "Found publish dir: $($publishAddinDir.FullName)"
+
+          # Copy plugin files to staging
+          $stagingPluginDir = Join-Path $stagingDir "IfcTesterRevit"
+          Copy-Item -Path "$($publishAddinDir.FullName)\IfcTesterRevit\*" -Destination $stagingPluginDir -Recurse -Force
+
+          # Clean up unnecessary files
+          Get-ChildItem -Path $stagingPluginDir -Filter "WebAec*" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+          Get-ChildItem -Path $stagingPluginDir -Filter "*.addin" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+
+          # Copy web app into staging
+          $stagingWebDir = Join-Path $stagingPluginDir "web"
+          New-Item -ItemType Directory -Path $stagingWebDir -Force | Out-Null
+          Copy-Item -Path "web\dist\*" -Destination $stagingWebDir -Recurse -Force
+
+          Write-Host "Staging prepared successfully"
+          Get-ChildItem $stagingDir -Recurse -File | Measure-Object | ForEach-Object { Write-Host "Total files in staging: $($_.Count)" }
+
+      - name: Generate .addin files
+        shell: pwsh
         run: |
-          $config = "${{ github.event.inputs.build_config || 'Release' }} R26"
-          $outputDir = "revit\bin\$config"
-          if (Test-Path $outputDir) {
-            Write-Host "Build successful: $outputDir"
-            Get-ChildItem $outputDir -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+          $generatedDir = "installer\generated"
+          if (-not (Test-Path $generatedDir)) {
+            New-Item -ItemType Directory -Path $generatedDir -Force | Out-Null
+          }
+
+          $templatePath = "installer\templates\IfcTesterRevit.addin.template"
+          $templateContent = Get-Content $templatePath -Raw
+
+          # R25
+          $r25Content = $templateContent -replace '\{ASSEMBLY_PATH\}', 'IfcTesterRevit\IfcTesterRevit.dll'
+          $r25Content | Out-File -FilePath (Join-Path $generatedDir "IfcTesterRevit.2025.addin") -Encoding UTF8 -NoNewline
+          Write-Host "Generated IfcTesterRevit.2025.addin"
+
+          # R26
+          $r26Content = $templateContent -replace '\{ASSEMBLY_PATH\}', 'IfcTesterRevit\IfcTesterRevit.dll'
+          $r26Content | Out-File -FilePath (Join-Path $generatedDir "IfcTesterRevit.2026.addin") -Encoding UTF8 -NoNewline
+          Write-Host "Generated IfcTesterRevit.2026.addin"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          # Verify installation
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $iscc) {
+            Write-Host "Inno Setup installed: $iscc"
           } else {
-            Write-Error "Build output not found: $outputDir"
+            Write-Error "Inno Setup installation failed"
             exit 1
           }
+
+      - name: Build installer
         shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $issPath = "installer\IfcTesterRevit.iss"
+          $distDir = "dist"
 
-      - name: Upload R25 build artifacts
+          if (-not (Test-Path $distDir)) {
+            New-Item -ItemType Directory -Path $distDir -Force | Out-Null
+          }
+
+          Write-Host "Compiling installer..."
+          & $iscc /O"$distDir" "$issPath"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup compilation failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+
+          # Show the generated installer
+          $installer = Get-ChildItem -Path $distDir -Filter "IfcTesterRevit-Setup-*.exe" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if ($installer) {
+            Write-Host "Installer: $($installer.Name)"
+            Write-Host "Size: $([math]::Round($installer.Length / 1MB, 2)) MB"
+          } else {
+            Write-Error "Installer file not found in $distDir"
+            exit 1
+          }
+
+      - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: IfcTesterRevit-R25-${{ github.event.inputs.build_config || 'Release' }}
-          path: revit/bin/${{ github.event.inputs.build_config || 'Release' }} R25/
-          retention-days: 30
-
-      - name: Upload R26 build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: IfcTesterRevit-R26-${{ github.event.inputs.build_config || 'Release' }}
-          path: revit/bin/${{ github.event.inputs.build_config || 'Release' }} R26/
+          name: IfcTesterRevit-Installer
+          path: dist/IfcTesterRevit-Setup-*.exe
           retention-days: 30
