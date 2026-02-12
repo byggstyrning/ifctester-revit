@@ -1,0 +1,110 @@
+name: Build Revit Plugin for Windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_config:
+        description: 'Build Configuration'
+        required: true
+        default: 'Release'
+        type: choice
+        options:
+          - 'Debug'
+          - 'Release'
+  push:
+    branches:
+      - main
+      - develop
+      - fix/revit-installer-detection
+    paths:
+      - 'revit/**'
+      - 'web/**'
+      - '.github/workflows/build-windows.yml'
+  pull_request:
+    branches:
+      - main
+      - develop
+    paths:
+      - 'revit/**'
+      - 'web/**'
+      - '.github/workflows/build-windows.yml'
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+          cache-dependency-path: web/package-lock.json
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Install web dependencies
+        run: npm ci
+        working-directory: web
+
+      - name: Build web app
+        run: npm run build
+        working-directory: web
+
+      - name: Restore NuGet packages
+        run: dotnet restore IfcTesterRevit.csproj
+        working-directory: revit
+
+      - name: Build Revit plugin (R25)
+        run: dotnet build IfcTesterRevit.csproj -c "${{ github.event.inputs.build_config || 'Release' }} R25" --no-incremental
+        working-directory: revit
+
+      - name: Build Revit plugin (R26)
+        run: dotnet build IfcTesterRevit.csproj -c "${{ github.event.inputs.build_config || 'Release' }} R26" --no-incremental
+        working-directory: revit
+
+      - name: Verify build output (R25)
+        run: |
+          $config = "${{ github.event.inputs.build_config || 'Release' }} R25"
+          $outputDir = "revit\bin\$config"
+          if (Test-Path $outputDir) {
+            Write-Host "Build successful: $outputDir"
+            Get-ChildItem $outputDir -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+          } else {
+            Write-Error "Build output not found: $outputDir"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Verify build output (R26)
+        run: |
+          $config = "${{ github.event.inputs.build_config || 'Release' }} R26"
+          $outputDir = "revit\bin\$config"
+          if (Test-Path $outputDir) {
+            Write-Host "Build successful: $outputDir"
+            Get-ChildItem $outputDir -Recurse | Select-Object FullName, Length | Format-Table -AutoSize
+          } else {
+            Write-Error "Build output not found: $outputDir"
+            exit 1
+          }
+        shell: pwsh
+
+      - name: Upload R25 build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: IfcTesterRevit-R25-${{ github.event.inputs.build_config || 'Release' }}
+          path: revit/bin/${{ github.event.inputs.build_config || 'Release' }} R25/
+          retention-days: 30
+
+      - name: Upload R26 build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: IfcTesterRevit-R26-${{ github.event.inputs.build_config || 'Release' }}
+          path: revit/bin/${{ github.event.inputs.build_config || 'Release' }} R26/
+          retention-days: 30
