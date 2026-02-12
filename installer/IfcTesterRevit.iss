@@ -2,11 +2,11 @@
 ; Supports Revit 2025 and 2026
 
 #define AppName "IfcTester Revit"
-#define AppVersion "1.1.1"
+#define AppVersion "1.1.2"
 #define AppPublisher "Byggstyrning"
 #define AppPublisherURL "https://byggstyrning.se"
 #define AppId "{{3EEEF746-55D7-4E99-B04A-15A9ED3AE4F4}"
-#define OutputBaseFilename "IfcTesterRevit-Setup-v1.1.1"
+#define OutputBaseFilename "IfcTesterRevit-Setup-v1.1.2"
 
 [Setup]
 AppId={#AppId}
@@ -30,6 +30,9 @@ ArchitecturesAllowed=x64
 ArchitecturesInstallIn64BitMode=x64
 UninstallDisplayIcon={app}\IfcTesterRevit.dll
 UninstallDisplayName={#AppName}
+; Clean uninstall previous version before installing new one
+CloseApplications=yes
+CloseApplicationsFilter=*.dll,*.exe
 VersionInfoVersion={#AppVersion}
 VersionInfoCompany={#AppPublisher}
 VersionInfoDescription={#AppName} Installer
@@ -115,7 +118,7 @@ begin
   end;
 end;
 
-// Get the Addins folder path for a specific Revit version
+// Get the Addins folder path for a specific Revit version (all-users location)
 // Creates the folder structure if it doesn't exist
 function GetRevitAddinPath(Year: Integer): string;
 var
@@ -124,7 +127,7 @@ var
   RevitPath: string;
   AddinsPath: string;
 begin
-  AppDataPath := ExpandConstant('{userappdata}');
+  AppDataPath := ExpandConstant('{commonappdata}');
   Result := AppDataPath + '\Autodesk\Revit\Addins\' + IntToStr(Year);
   
   // Create the full directory structure if it doesn't exist
@@ -147,8 +150,59 @@ begin
   end;
 end;
 
+// Get the old per-user Addins folder path for legacy cleanup
+// Does NOT create directories - read-only check for old installations
+function GetRevitUserAddinPath(Year: Integer): string;
+begin
+  Result := ExpandConstant('{userappdata}') + '\Autodesk\Revit\Addins\' + IntToStr(Year);
+end;
+
+// Remove legacy per-user IfcTesterRevit files for a given Revit year
+// Silently skips if files don't exist. Only reaches the current user's AppData.
+procedure CleanupOldUserAddinFiles(Year: Integer);
+var
+  UserPath: string;
+begin
+  UserPath := GetRevitUserAddinPath(Year);
+  if DirExists(UserPath + '\IfcTesterRevit') then
+    DelTree(UserPath + '\IfcTesterRevit', True, True, True);
+  if FileExists(UserPath + '\IfcTesterRevit.addin') then
+    DeleteFile(UserPath + '\IfcTesterRevit.addin');
+end;
+
+// Uninstall previous version if found
+function UninstallPreviousVersion(): Boolean;
+var
+  UninstallString: string;
+  UninstallPath: string;
+  ResultCode: Integer;
+begin
+  Result := True;
+  
+  // Check for previous installation in registry
+  if RegQueryStringValue(HKLM, 'SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\{#AppId}_is1',
+                         'UninstallString', UninstallString) then
+  begin
+    // Extract the path without quotes
+    UninstallPath := RemoveQuotes(UninstallString);
+    
+    if FileExists(UninstallPath) then
+    begin
+      // Run the uninstaller silently
+      if not Exec(UninstallPath, '/SILENT /NORESTART', '', SW_SHOW, ewWaitUntilTerminated, ResultCode) then
+      begin
+        MsgBox('Failed to uninstall previous version. Error code: ' + IntToStr(ResultCode) + #13#10 +
+               'Installation will continue anyway.', mbError, MB_OK);
+      end;
+    end;
+  end;
+end;
+
 function InitializeSetup(): Boolean;
 begin
+  // First, handle uninstallation of previous version
+  UninstallPreviousVersion();
+  
   // Detect Revit installations via registry (works with custom install locations)
   Revit2025Installed := IsRevitVersionInstalled(2025);
   Revit2026Installed := IsRevitVersionInstalled(2026);
@@ -207,7 +261,14 @@ procedure CurStepChanged(CurStep: TSetupStep);
 begin
   if CurStep = ssPostInstall then
   begin
-    // Optionally show a message about restarting Revit
+    // Clean up old per-user addin files left by previous installer versions
+    // This only reaches the current user's AppData (other users' files are unreachable)
+    if WizardIsComponentSelected('revit2025') then
+      CleanupOldUserAddinFiles(2025);
+    if WizardIsComponentSelected('revit2026') then
+      CleanupOldUserAddinFiles(2026);
+
+    // Show a message about restarting Revit
     if WizardIsComponentSelected('revit2025') or WizardIsComponentSelected('revit2026') then
     begin
       MsgBox('Installation complete!' + #13#10 +
@@ -223,7 +284,7 @@ var
 begin
   if CurUninstallStep = usUninstall then
   begin
-    // Remove plugin files from all Revit versions
+    // Remove plugin files from the all-users ProgramData location
     Revit2025AddinPath := GetRevitAddinPath(2025);
     Revit2026AddinPath := GetRevitAddinPath(2026);
     
@@ -242,6 +303,11 @@ begin
       if FileExists(Revit2026AddinPath + '\IfcTesterRevit.addin') then
         DeleteFile(Revit2026AddinPath + '\IfcTesterRevit.addin');
     end;
+
+    // Also clean up legacy per-user files from old installer versions
+    // Only reaches the current user's AppData
+    CleanupOldUserAddinFiles(2025);
+    CleanupOldUserAddinFiles(2026);
   end;
 end;
 
