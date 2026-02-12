@@ -46,7 +46,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('web/package-lock.json') }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('web/package.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
 
@@ -56,7 +56,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Install web dependencies
-        run: npm ci
+        run: npm install
         working-directory: web
 
       - name: Build web app
