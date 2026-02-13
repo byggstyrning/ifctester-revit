@@ -47,7 +47,7 @@ jobs:
       - name: Read version from installer script
         id: version
         run: |
-          version=$(grep -oP '#define MyAppVersion "\K[^"]+' installer/IfcTesterArchiCAD.iss)
+          version=$(sed -n 's/^#define MyAppVersion "\([^"]*\)"/\1/p' installer/IfcTesterArchiCAD.iss)
           if [ -z "$version" ]; then
             echo "::error::Could not extract version from IfcTesterArchiCAD.iss"
             exit 1
