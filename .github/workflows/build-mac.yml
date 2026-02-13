@@ -44,6 +44,17 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Read version from installer script
+        id: version
+        run: |
+          version=$(grep -oP '#define MyAppVersion "\K[^"]+' installer/IfcTesterArchiCAD.iss)
+          if [ -z "$version" ]; then
+            echo "::error::Could not extract version from IfcTesterArchiCAD.iss"
+            exit 1
+          fi
+          echo "Version: $version"
+          echo "app_version=$version" >> $GITHUB_OUTPUT
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
@@ -207,6 +218,6 @@ jobs:
       - name: Upload DMG installer
         uses: actions/upload-artifact@v4
         with:
-          name: IfcTesterArchiCAD-Setup-mac
+          name: IfcTesterArchiCAD-Setup-mac-v${{ steps.version.outputs.app_version }}
           path: dist/IfcTesterArchiCAD-Setup-mac-v*.dmg
           retention-days: 30
