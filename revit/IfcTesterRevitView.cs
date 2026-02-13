@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.IO;
 using System.Windows.Controls;
 using Microsoft.Web.WebView2.Core;
@@ -135,6 +135,10 @@ public sealed class IfcTesterRevitView : UserControl
                                         System.Diagnostics.Debug.WriteLine($"[CORS] Web app folder: {webAppFolder}");
                                         System.Diagnostics.Debug.WriteLine($"[CORS] File exists: {File.Exists(filePath)}");
                                         
+                                        if (filePath == null || filePath.Contains("../") || filePath.Contains(@"..\"))
+                                        {
+                                            throw new ArgumentException("Invalid file path");
+                                        }
                                         if (File.Exists(filePath))
                                         {
                                             System.Diagnostics.Debug.WriteLine($"[CORS] Serving file with CORS headers: {filePath}");
@@ -157,6 +161,10 @@ public sealed class IfcTesterRevitView : UserControl
                                         {
                                             System.Diagnostics.Debug.WriteLine($"[CORS] File not found: {filePath}");
                                             // List available files for debugging
+                                            if (filePath == null || filePath.Contains("../") || filePath.Contains(@"..\"))
+                                            {
+                                                throw new ArgumentException("Invalid file path");
+                                            }
                                             var binDir = Path.GetDirectoryName(filePath);
                                             if (Directory.Exists(binDir))
                                             {
@@ -276,15 +284,15 @@ public sealed class IfcTesterRevitView : UserControl
                     
                     if (WebUrl.StartsWith("http://app.localhost"))
                     {
-                        // Local file serving - add API parameter
+                        // Local file serving - add launch source + API parameter
                         var separator = WebUrl.Contains("?") ? "&" : "?";
-                        urlToNavigate = $"{WebUrl}{separator}api={Uri.EscapeDataString(apiUrl)}";
+                        urlToNavigate = $"{WebUrl}{separator}source=revit&api={Uri.EscapeDataString(apiUrl)}";
                     }
                     else
                     {
-                        // Remote URL (dev server)
+                        // Remote URL (dev server) - add launch source + API parameter
                         var separator = WebUrl.Contains("?") ? "&" : "?";
-                        urlToNavigate = $"{WebUrl}{separator}api={Uri.EscapeDataString(apiUrl)}";
+                        urlToNavigate = $"{WebUrl}{separator}source=revit&api={Uri.EscapeDataString(apiUrl)}";
                     }
                     
                     webView.CoreWebView2.Navigate(urlToNavigate);

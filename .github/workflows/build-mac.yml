@@ -22,6 +22,7 @@ on:
     branches:
       - main
       - develop
+      - fix/revit-installer-detection
     paths:
       - 'archicad/**'
       - 'web/**'
@@ -38,86 +39,185 @@ on:
 jobs:
   build:
     runs-on: macos-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      
+
+      - name: Read version from installer script
+        id: version
+        run: |
+          version=$(sed -n 's/^#define MyAppVersion "\([^"]*\)"/\1/p' installer/IfcTesterArchiCAD.iss)
+          if [ -z "$version" ]; then
+            echo "::error::Could not extract version from IfcTesterArchiCAD.iss"
+            exit 1
+          fi
+          echo "Version: $version"
+          echo "app_version=$version" >> $GITHUB_OUTPUT
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.x'
-      
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: '18'
-          cache: 'npm'
-          cache-dependency-path: web/package-lock.json
-      
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('web/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
       - name: Install web dependencies
-        run: |
-          cd web
-          npm ci
-      
+        run: npm install
+        working-directory: web
+
+      - name: Download Python packages for Pyodide
+        run: bash web/scripts/download-packages.sh
+
       - name: Build web app
+        run: npm run build
+        working-directory: web
+
+      - name: Prepare Archicad API DevKit
+        id: prepare_devkit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cd web
-          npm run build
-      
-      - name: Find ArchiCAD DevKit
-        id: find_devkit
-        run: |
-          # Common locations for ArchiCAD API DevKit on macOS
-          POSSIBLE_PATHS=(
-            "$HOME/Library/Application Support/GRAPHISOFT/API Development Kit ${{ github.event.inputs.archicad_version || '29' }}"
-            "/Applications/GRAPHISOFT/API Development Kit ${{ github.event.inputs.archicad_version || '29' }}"
-            "/Users/Shared/GRAPHISOFT/API Development Kit ${{ github.event.inputs.archicad_version || '29' }}"
-          )
-          
-          for path in "${POSSIBLE_PATHS[@]}"; do
-            if [ -f "$path/Support/Inc/ACAPinc.h" ]; then
-              echo "devkit_path=$path" >> $GITHUB_OUTPUT
-              echo "Found DevKit at: $path"
-              exit 0
+          devkit_path=""
+
+          # Check AC_API_DEVKIT_DIR environment variable
+          if [ -n "$AC_API_DEVKIT_DIR" ] && [ -f "$AC_API_DEVKIT_DIR/Support/Inc/ACAPinc.h" ]; then
+            devkit_path="$AC_API_DEVKIT_DIR"
+            echo "Using DevKit from AC_API_DEVKIT_DIR: $devkit_path"
+          fi
+
+          # Check common macOS paths
+          if [ -z "$devkit_path" ]; then
+            POSSIBLE_PATHS=(
+              "$HOME/Library/Application Support/GRAPHISOFT/API Development Kit 29"
+              "/Applications/GRAPHISOFT/API Development Kit 29"
+              "/Users/Shared/GRAPHISOFT/API Development Kit 29"
+            )
+
+            for path in "${POSSIBLE_PATHS[@]}"; do
+              if [ -f "$path/Support/Inc/ACAPinc.h" ]; then
+                devkit_path="$path"
+                echo "Found DevKit at: $devkit_path"
+                break
+              fi
+            done
+          fi
+
+          # Download from GRAPHISOFT releases if not found locally
+          if [ -z "$devkit_path" ]; then
+            echo "DevKit not found locally. Downloading from GRAPHISOFT releases..."
+
+            release_api="https://api.github.com/repos/GRAPHISOFT/archicad-api-devkit/releases"
+            headers=(-H "Accept: application/vnd.github+json" -H "X-GitHub-Api-Version: 2022-11-28")
+            if [ -n "$GITHUB_TOKEN" ]; then
+              headers+=(-H "Authorization: Bearer $GITHUB_TOKEN")
             fi
-          done
-          
-          echo "::error::ArchiCAD API DevKit not found. Please install it or set AC_API_DEVKIT_DIR manually."
-          exit 1
-      
+
+            releases_json=$(curl -s "${headers[@]}" "$release_api")
+
+            # Find the first non-draft, non-prerelease release with a MAC.29 asset
+            asset_url=""
+            asset_name=""
+            for row in $(echo "$releases_json" | python3 -c "
+          import sys, json
+          releases = json.load(sys.stdin)
+          for r in releases:
+              if r.get('draft') or r.get('prerelease'):
+                  continue
+              for a in r.get('assets', []):
+                  name = a.get('name', '')
+                  if name.startswith('API.Development.Kit.MAC.29.') and name.endswith('.zip'):
+                      print(a['browser_download_url'] + '|' + name)
+                      sys.exit(0)
+          sys.exit(1)
+          "); do
+              asset_url="${row%|*}"
+              asset_name="${row#*|}"
+            done
+
+            if [ -z "$asset_url" ]; then
+              echo "::error::Could not find a MAC.29 DevKit release asset in GRAPHISOFT/archicad-api-devkit."
+              exit 1
+            fi
+
+            download_dir="$RUNNER_TEMP/archicad-devkit-download"
+            extract_dir="$RUNNER_TEMP/archicad-devkit"
+            mkdir -p "$download_dir" "$extract_dir"
+
+            echo "Downloading: $asset_name"
+            curl -L -o "$download_dir/$asset_name" "$asset_url"
+
+            echo "Extracting DevKit archive..."
+            unzip -q "$download_dir/$asset_name" -d "$extract_dir"
+
+            # Locate ACAPinc.h to find the DevKit root
+            acap_header=$(find "$extract_dir" -path "*/Support/Inc/ACAPinc.h" -print -quit)
+
+            if [ -z "$acap_header" ]; then
+              echo "::error::Downloaded DevKit did not contain Support/Inc/ACAPinc.h"
+              exit 1
+            fi
+
+            # DevKit root = parent of Support (go up 3 levels from ACAPinc.h)
+            inc_dir=$(dirname "$acap_header")       # .../Support/Inc
+            support_dir=$(dirname "$inc_dir")        # .../Support
+            devkit_path=$(dirname "$support_dir")    # .../DevKitRoot
+
+            echo "Downloaded DevKit extracted to: $devkit_path"
+          fi
+
+          # Final verification
+          if [ ! -f "$devkit_path/Support/Inc/ACAPinc.h" ]; then
+            echo "::error::Invalid ArchiCAD DevKit path: $devkit_path"
+            exit 1
+          fi
+
+          echo "Using DevKit: $devkit_path"
+          echo "devkit_path=$devkit_path" >> $GITHUB_OUTPUT
+
       - name: Configure CMake
         run: |
           cd archicad
           cmake -B cmake-build -S . \
             -G "Unix Makefiles" \
             -DCMAKE_BUILD_TYPE=${{ github.event.inputs.build_config || 'Release' }} \
-            -DAC_API_DEVKIT_DIR="${{ steps.find_devkit.outputs.devkit_path }}"
-      
+            -DAC_API_DEVKIT_DIR="${{ steps.prepare_devkit.outputs.devkit_path }}"
+
       - name: Build add-on
         run: |
           cd archicad
           cmake --build cmake-build --config ${{ github.event.inputs.build_config || 'Release' }} -j$(sysctl -n hw.ncpu)
-      
+
       - name: Verify build output
         run: |
           cd archicad
           BUILD_OUTPUT="cmake-build/${{ github.event.inputs.build_config || 'Release' }}/IfcTesterArchiCAD.bundle"
           if [ -d "$BUILD_OUTPUT" ]; then
-            echo "✅ Build successful: $BUILD_OUTPUT"
+            echo "Build successful: $BUILD_OUTPUT"
             ls -lh "$BUILD_OUTPUT"
           else
             echo "::error::Build output not found: $BUILD_OUTPUT"
             exit 1
           fi
-      
-      - name: Upload build artifacts
+
+      - name: Build DMG installer
+        run: |
+          bash scripts/archicad/installer-mac.sh --skip-build --skip-web-build
+
+      - name: Upload DMG installer
         uses: actions/upload-artifact@v4
         with:
-          name: IfcTesterArchiCAD-macOS-${{ github.event.inputs.archicad_version || '29' }}-${{ github.event.inputs.build_config || 'Release' }}
-          path: |
-            archicad/cmake-build/${{ github.event.inputs.build_config || 'Release' }}/IfcTesterArchiCAD.bundle
-            archicad/cmake-build/${{ github.event.inputs.build_config || 'Release' }}/WebApp
+          name: IfcTesterArchiCAD-Setup-mac-v${{ steps.version.outputs.app_version }}
+          path: dist/IfcTesterArchiCAD-Setup-mac-v*.dmg
           retention-days: 30
-
-

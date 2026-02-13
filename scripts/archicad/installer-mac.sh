@@ -52,7 +52,7 @@ source "$SCRIPT_DIR/../utils/common-mac.sh"
 
 # Version info
 APP_NAME="IfcTester for ArchiCAD"
-APP_VERSION="1.1.0"
+APP_VERSION="1.2.0"
 DMG_NAME="IfcTesterArchiCAD-Setup-mac-v${APP_VERSION}"
 
 write_header "IfcTester ArchiCAD - Build Installer (macOS)"

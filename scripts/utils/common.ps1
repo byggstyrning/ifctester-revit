@@ -191,8 +191,17 @@ function Build-WebApp {
         # Install dependencies if needed
         if (-not (Test-Path "node_modules")) {
             Write-Info "Installing npm dependencies..."
-            npm install
-            if ($LASTEXITCODE -ne 0) {
+            $previousEap = $ErrorActionPreference
+            $ErrorActionPreference = "Continue"
+            try {
+                cmd /c "npm install"
+                $npmInstallExitCode = $LASTEXITCODE
+            }
+            finally {
+                $ErrorActionPreference = $previousEap
+            }
+
+            if ($npmInstallExitCode -ne 0) {
                 Write-ErrorMsg "npm install failed"
                 return $false
             }
@@ -207,13 +216,21 @@ function Build-WebApp {
         
         # Build
         Write-Info "Running npm run build..."
-        npm run build 2>&1 | ForEach-Object {
-            if ($_ -match 'error|Error|ERROR|failed|Failed|FAILED|built|transformed|rendering|computing') {
-                Write-Host "    $_" -ForegroundColor Gray
+        $previousEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        try {
+            cmd /c "npm run build" 2>&1 | ForEach-Object {
+                if ($_ -match 'error|Error|ERROR|failed|Failed|FAILED|built|transformed|rendering|computing') {
+                    Write-Host "    $_" -ForegroundColor Gray
+                }
             }
+            $npmBuildExitCode = $LASTEXITCODE
+        }
+        finally {
+            $ErrorActionPreference = $previousEap
         }
         
-        if ($LASTEXITCODE -ne 0) {
+        if ($npmBuildExitCode -ne 0) {
             Write-ErrorMsg "Web app build failed"
             return $false
         }

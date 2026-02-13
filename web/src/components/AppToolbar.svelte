@@ -269,6 +269,29 @@
     };
     
     onMount(async () => {
+        // Prefer explicit launch source from host integrations when available.
+        const urlParams = new URLSearchParams(window.location.search);
+        const source = (urlParams.get('source') || '').toLowerCase();
+        const isArchiCADHost = typeof window !== 'undefined' && !!window.ACAPI;
+
+        if (source === 'bonsai' && Bonsai.enabled) {
+            activeTab = 'bonsai';
+            connect();
+            return;
+        }
+
+        if (source === 'revit' && Revit.enabled) {
+            activeTab = 'revit';
+            await connectRevit();
+            return;
+        }
+
+        if ((source === 'archicad' || isArchiCADHost) && ArchiCAD.enabled) {
+            activeTab = 'archicad';
+            await connectArchiCAD();
+            return;
+        }
+
         if (Bonsai.enabled) {
             activeTab = 'bonsai';
             connect();

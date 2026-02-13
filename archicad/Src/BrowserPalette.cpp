@@ -163,7 +163,7 @@ void BrowserPalette::InitBrowserControl()
 {
     // Construct the URL - web app is served from the same API server
     // Add cache-busting parameter to ensure we get the latest version
-    GS::UniString url = GS::UniString::Printf("http://127.0.0.1:%d/?t=%lld", ApiServerPort, (long long)std::time(nullptr));
+    GS::UniString url = GS::UniString::Printf("http://127.0.0.1:%d/?source=archicad&t=%lld", ApiServerPort, (long long)std::time(nullptr));
     
     // Log the URL being loaded
     ACAPI_WriteReport("IfcTester Browser: Loading URL: %s", false, url.ToCStr().Get());

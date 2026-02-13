@@ -10,6 +10,24 @@ import * as API from './api';
 let pyodide = null;
 let ready = false;
 
+async function installFromCandidateUrls(micropip, urls, packageName) {
+    let lastError = null;
+
+    for (const url of urls) {
+        try {
+            console.log(`[worker] Installing ${packageName} from: ${url}`);
+            await micropip.install(url);
+            console.log(`[worker] ${packageName} installed successfully from: ${url}`);
+            return;
+        } catch (error) {
+            lastError = error;
+            console.warn(`[worker] Failed to install ${packageName} from ${url}: ${error.message}`);
+        }
+    }
+
+    throw lastError ?? new Error(`No candidate URLs available for ${packageName}`);
+}
+
 self.addEventListener('message', async (event) => {
     console.log("[worker] Received message:", event.data);
     const { type, payload, id } = event.data;
@@ -81,24 +99,16 @@ async function initEnvironment() {
 
     const micropip = pyodide.pyimport('micropip');
 
-    // Install IfcOpenShell wheel (local) - use absolute URL
+    // Install IfcOpenShell wheel (local) - try multiple known filenames.
     try {
-        const ifcopenshellUrl = resolveUrl(config.wasm.wheel_url);
-        console.log(`[worker] Installing IfcOpenShell from: ${ifcopenshellUrl}`);
-        
-        // Check if file exists first by trying a HEAD request
-        try {
-            const headResponse = await fetch(ifcopenshellUrl, { method: 'HEAD', mode: 'cors' });
-            if (!headResponse.ok) {
-                throw new Error(`File not found (${headResponse.status})`);
-            }
-            console.log(`[worker] IfcOpenShell file exists, proceeding with install...`);
-        } catch (headError) {
-            console.warn(`[worker] HEAD request failed, trying install anyway: ${headError.message}`);
-        }
-        
-        await micropip.install(ifcopenshellUrl);
-        console.log("[worker] IfcOpenShell installed successfully");
+        const wheelCandidates = [
+            config.wasm.wheel_url,
+            "/worker/bin/ifcopenshell-0.8.3+bb329af-cp313-cp313-emscripten_4_0_9_wasm32.whl",
+            "/worker/bin/ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl",
+            "/worker/bin/ifcopenshell-0.8.3-cp313-cp313-emscripten_wasm32.whl"
+        ];
+        const ifcopenshellUrls = [...new Set(wheelCandidates.map(resolveUrl))];
+        await installFromCandidateUrls(micropip, ifcopenshellUrls, "IfcOpenShell");
     } catch (error) {
         console.error(`[worker] Failed to install IfcOpenShell from local file: ${error.message}`);
         console.error(`[worker] Error details:`, error);
