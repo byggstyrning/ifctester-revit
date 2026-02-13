@@ -1,4 +1,4 @@
-name: Build Revit Plugin for Windows
+name: Build Windows Installers (Revit + Archicad)
 
 on:
   workflow_dispatch:
@@ -9,6 +9,7 @@ on:
       - fix/revit-installer-detection
     paths:
       - 'revit/**'
+      - 'archicad/**'
       - 'web/**'
       - 'installer/**'
       - '.github/workflows/build-windows.yml'
@@ -18,12 +19,14 @@ on:
       - develop
     paths:
       - 'revit/**'
+      - 'archicad/**'
       - 'web/**'
       - 'installer/**'
       - '.github/workflows/build-windows.yml'
 
 jobs:
   build:
+    name: Build Revit installer (Windows)
     runs-on: windows-latest
 
     steps:
@@ -63,6 +66,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Install web dependencies
+        shell: cmd
         run: npm install
         working-directory: web
 
@@ -72,6 +76,7 @@ jobs:
           & web\scripts\download-packages.ps1
 
       - name: Build web app
+        shell: cmd
         run: npm run build
         working-directory: web
 
@@ -189,4 +194,218 @@ jobs:
         with:
           name: IfcTesterRevit-Setup-v${{ steps.version.outputs.app_version }}
           path: installer-output/IfcTesterRevit-Setup-*.exe
+          retention-days: 30
+
+  build_archicad:
+    name: Build Archicad installer (Windows)
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Read version from Archicad installer script
+        id: version
+        shell: pwsh
+        run: |
+          $issContent = Get-Content "installer\IfcTesterArchiCAD.iss" -Raw
+          if ($issContent -match '#define MyAppVersion "([^"]+)"') {
+            $version = $Matches[1]
+            Write-Host "Version: $version"
+            "app_version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            Write-Error "Could not extract version from IfcTesterArchiCAD.iss"
+            exit 1
+          }
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+
+      - name: Cache npm dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-npm-${{ hashFiles('web/package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-npm-
+
+      - name: Install web dependencies
+        shell: cmd
+        run: npm install
+        working-directory: web
+
+      - name: Download Python packages for Pyodide
+        shell: pwsh
+        run: |
+          & web\scripts\download-packages.ps1
+
+      - name: Build web app
+        shell: cmd
+        run: npm run build
+        working-directory: web
+
+      - name: Prepare Archicad API DevKit
+        id: prepare_devkit
+        shell: pwsh
+        run: |
+          $devKitPath = $env:ARCHICAD_API_DEVKIT
+
+          if ($devKitPath -and (Test-Path (Join-Path $devKitPath "Support\Inc\ACAPinc.h"))) {
+            Write-Host "Using DevKit from ARCHICAD_API_DEVKIT: $devKitPath"
+          } else {
+            $devKitPath = $null
+            $possiblePaths = @(
+              "C:\code\archicad-api\API.Development.Kit.WIN.29.3100",
+              "C:\Program Files\GRAPHISOFT\API Development Kit 29",
+              "C:\Program Files (x86)\GRAPHISOFT\API Development Kit 29",
+              "$env:USERPROFILE\GRAPHISOFT\API Development Kit 29"
+            )
+
+            foreach ($path in $possiblePaths) {
+              if (Test-Path $path) {
+                $devKitPath = $path
+                break
+              }
+            }
+          }
+
+          if (-not $devKitPath) {
+            Write-Host "DevKit not found locally. Downloading from GRAPHISOFT releases..."
+
+            $releaseApi = "https://api.github.com/repos/GRAPHISOFT/archicad-api-devkit/releases"
+            $headers = @{
+              "Accept" = "application/vnd.github+json"
+              "X-GitHub-Api-Version" = "2022-11-28"
+            }
+
+            $releases = Invoke-RestMethod -Uri $releaseApi -Headers $headers -Method Get
+            $asset = $null
+
+            foreach ($release in $releases) {
+              if ($release.draft -or $release.prerelease) {
+                continue
+              }
+
+              $match = $release.assets | Where-Object {
+                $_.name -like "API.Development.Kit.WIN.29.*.zip"
+              } | Select-Object -First 1
+
+              if ($match) {
+                $asset = $match
+                break
+              }
+            }
+
+            if (-not $asset) {
+              Write-Error "Could not find a WIN.29 DevKit release asset in GRAPHISOFT/archicad-api-devkit."
+              exit 1
+            }
+
+            $downloadDir = Join-Path $env:RUNNER_TEMP "archicad-devkit-download"
+            $extractDir = Join-Path $env:RUNNER_TEMP "archicad-devkit"
+            New-Item -ItemType Directory -Path $downloadDir -Force | Out-Null
+            New-Item -ItemType Directory -Path $extractDir -Force | Out-Null
+
+            $archivePath = Join-Path $downloadDir $asset.name
+            Write-Host "Downloading: $($asset.name)"
+            Invoke-WebRequest -Uri $asset.browser_download_url -OutFile $archivePath
+
+            Write-Host "Extracting DevKit archive..."
+            Expand-Archive -Path $archivePath -DestinationPath $extractDir -Force
+
+            $acapHeader = Get-ChildItem -Path $extractDir -Recurse -File -Filter "ACAPinc.h" |
+              Where-Object { $_.FullName -like "*\Support\Inc\ACAPinc.h" } |
+              Select-Object -First 1
+
+            if (-not $acapHeader) {
+              Write-Error "Downloaded DevKit did not contain Support\\Inc\\ACAPinc.h"
+              exit 1
+            }
+
+            $devKitPath = Split-Path (Split-Path $acapHeader.FullName -Parent) -Parent
+            Write-Host "Downloaded DevKit extracted to: $devKitPath"
+          }
+
+          if (-not (Test-Path (Join-Path $devKitPath "Support\Inc\ACAPinc.h"))) {
+            Write-Error "Invalid ArchiCAD DevKit path: $devKitPath"
+            exit 1
+          }
+
+          Write-Host "Using DevKit: $devKitPath"
+          "devkit_path=$devKitPath" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
+      - name: Configure CMake (ArchiCAD)
+        shell: pwsh
+        run: |
+          cmake -B "archicad\Build" -S "archicad" `
+            -G "Visual Studio 17 2022" `
+            -A x64 `
+            -T v143 `
+            -DAC_API_DEVKIT_DIR="${{ steps.prepare_devkit.outputs.devkit_path }}"
+
+      - name: Build Archicad add-on
+        shell: pwsh
+        run: |
+          cmake --build "archicad\Build" --config Release
+
+      - name: Verify Archicad build output
+        shell: pwsh
+        run: |
+          $output = "archicad\Build\Release\IfcTesterArchiCAD.apx"
+          if (-not (Test-Path $output)) {
+            Write-Error "Build output not found: $output"
+            exit 1
+          }
+
+          $file = Get-Item $output
+          Write-Host "Add-on: $($file.Name)"
+          Write-Host "Size: $([math]::Round($file.Length / 1MB, 2)) MB"
+
+      - name: Install Inno Setup
+        shell: pwsh
+        run: |
+          choco install innosetup --yes --no-progress
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          if (Test-Path $iscc) {
+            Write-Host "Inno Setup installed: $iscc"
+          } else {
+            Write-Error "Inno Setup installation failed"
+            exit 1
+          }
+
+      - name: Build Archicad installer
+        shell: pwsh
+        run: |
+          $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
+          $issPath = "installer\IfcTesterArchiCAD.iss"
+          $outputDir = "installer-output-archicad"
+          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
+
+          Write-Host "Compiling Archicad installer..."
+          & $iscc /O"$outputDir" "$issPath"
+
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "Inno Setup compilation failed with exit code $LASTEXITCODE"
+            exit 1
+          }
+
+          $installer = Get-ChildItem -Path $outputDir -Filter "IfcTesterArchiCAD-Setup-win-v*.exe" |
+            Sort-Object LastWriteTime -Descending |
+            Select-Object -First 1
+
+          if ($installer) {
+            Write-Host "Installer: $($installer.Name)"
+            Write-Host "Size: $([math]::Round($installer.Length / 1MB, 2)) MB"
+          } else {
+            Write-Error "Installer file not found in $outputDir"
+            exit 1
+          }
+
+      - name: Upload Archicad installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: IfcTesterArchiCAD-Setup-v${{ steps.version.outputs.app_version }}
+          path: installer-output-archicad/IfcTesterArchiCAD-Setup-win-v*.exe
           retention-days: 30
