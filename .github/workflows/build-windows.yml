@@ -30,6 +30,20 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Read version from installer script
+        id: version
+        shell: pwsh
+        run: |
+          $issContent = Get-Content "installer\IfcTesterRevit.iss" -Raw
+          if ($issContent -match '#define AppVersion "([^"]+)"') {
+            $version = $Matches[1]
+            Write-Host "Version: $version"
+            "app_version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          } else {
+            Write-Error "Could not extract version from IfcTesterRevit.iss"
+            exit 1
+          }
+
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
@@ -52,6 +66,11 @@ jobs:
         run: npm install
         working-directory: web
 
+      - name: Download Python packages for Pyodide
+        shell: pwsh
+        run: |
+          & web\scripts\download-packages.ps1
+
       - name: Build web app
         run: npm run build
         working-directory: web
@@ -68,7 +87,6 @@ jobs:
         shell: pwsh
         run: |
           $stagingDir = "installer\staging"
-          $generatedDir = "installer\generated"
 
           # Clean and create staging directory
           if (Test-Path $stagingDir) { Remove-Item $stagingDir -Recurse -Force }
@@ -98,8 +116,9 @@ jobs:
           New-Item -ItemType Directory -Path $stagingWebDir -Force | Out-Null
           Copy-Item -Path "web\dist\*" -Destination $stagingWebDir -Recurse -Force
 
-          Write-Host "Staging prepared successfully"
-          Get-ChildItem $stagingDir -Recurse -File | Measure-Object | ForEach-Object { Write-Host "Total files in staging: $($_.Count)" }
+          # Report staging contents
+          $stats = Get-ChildItem $stagingDir -Recurse -File | Measure-Object -Property Length -Sum
+          Write-Host "Staging: $($stats.Count) files, $([math]::Round($stats.Sum / 1MB, 2)) MB"
 
       - name: Generate .addin files
         shell: pwsh
@@ -126,7 +145,6 @@ jobs:
         shell: pwsh
         run: |
           choco install innosetup --yes --no-progress
-          # Verify installation
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           if (Test-Path $iscc) {
             Write-Host "Inno Setup installed: $iscc"
@@ -140,14 +158,13 @@ jobs:
         run: |
           $iscc = "C:\Program Files (x86)\Inno Setup 6\ISCC.exe"
           $issPath = "installer\IfcTesterRevit.iss"
-          $distDir = "dist"
 
-          if (-not (Test-Path $distDir)) {
-            New-Item -ItemType Directory -Path $distDir -Force | Out-Null
-          }
+          # Use a clean output directory so only the new installer is uploaded
+          $outputDir = "installer-output"
+          New-Item -ItemType Directory -Path $outputDir -Force | Out-Null
 
           Write-Host "Compiling installer..."
-          & $iscc /O"$distDir" "$issPath"
+          & $iscc /O"$outputDir" "$issPath"
 
           if ($LASTEXITCODE -ne 0) {
             Write-Error "Inno Setup compilation failed with exit code $LASTEXITCODE"
@@ -155,7 +172,7 @@ jobs:
           }
 
           # Show the generated installer
-          $installer = Get-ChildItem -Path $distDir -Filter "IfcTesterRevit-Setup-*.exe" |
+          $installer = Get-ChildItem -Path $outputDir -Filter "IfcTesterRevit-Setup-*.exe" |
             Sort-Object LastWriteTime -Descending |
             Select-Object -First 1
 
@@ -163,13 +180,13 @@ jobs:
             Write-Host "Installer: $($installer.Name)"
             Write-Host "Size: $([math]::Round($installer.Length / 1MB, 2)) MB"
           } else {
-            Write-Error "Installer file not found in $distDir"
+            Write-Error "Installer file not found in $outputDir"
             exit 1
           }
 
       - name: Upload installer
         uses: actions/upload-artifact@v4
         with:
-          name: IfcTesterRevit-Installer
-          path: dist/IfcTesterRevit-Setup-*.exe
+          name: IfcTesterRevit-Setup-v${{ steps.version.outputs.app_version }}
+          path: installer-output/IfcTesterRevit-Setup-*.exe
           retention-days: 30
