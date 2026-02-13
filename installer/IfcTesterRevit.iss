@@ -6,7 +6,7 @@
 #define AppPublisher "Byggstyrning"
 #define AppPublisherURL "https://byggstyrning.se"
 #define AppId "{{3EEEF746-55D7-4E99-B04A-15A9ED3AE4F4}"
-#define OutputBaseFilename "IfcTesterRevit-Setup-v1.1.2"
+#define OutputBaseFilename "IfcTesterRevit-Setup-v" + AppVersion
 
 [Setup]
 AppId={#AppId}

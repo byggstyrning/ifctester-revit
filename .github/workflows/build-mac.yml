@@ -219,5 +219,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: IfcTesterArchiCAD-Setup-mac-v${{ steps.version.outputs.app_version }}
-          path: dist/IfcTesterArchiCAD-Setup-mac-v*.dmg
+          path: dist/IfcTesterArchiCAD-Setup-mac-v${{ steps.version.outputs.app_version }}.dmg
           retention-days: 30
