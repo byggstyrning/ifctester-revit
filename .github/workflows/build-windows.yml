@@ -279,6 +279,9 @@ jobs:
               "Accept" = "application/vnd.github+json"
               "X-GitHub-Api-Version" = "2022-11-28"
             }
+            if ($env:GITHUB_TOKEN) {
+              $headers["Authorization"] = "Bearer $env:GITHUB_TOKEN"
+            }
 
             $releases = Invoke-RestMethod -Uri $releaseApi -Headers $headers -Method Get
             $asset = $null
