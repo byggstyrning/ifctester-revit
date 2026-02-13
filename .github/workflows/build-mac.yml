@@ -204,18 +204,9 @@ jobs:
         run: |
           bash scripts/archicad/installer-mac.sh --skip-build --skip-web-build
 
-      - name: Upload build artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: IfcTesterArchiCAD-macOS-${{ github.event.inputs.archicad_version || '29' }}-${{ github.event.inputs.build_config || 'Release' }}
-          path: |
-            archicad/cmake-build/${{ github.event.inputs.build_config || 'Release' }}/IfcTesterArchiCAD.bundle
-          retention-days: 30
-
       - name: Upload DMG installer
         uses: actions/upload-artifact@v4
         with:
           name: IfcTesterArchiCAD-Setup-mac
           path: dist/IfcTesterArchiCAD-Setup-mac-v*.dmg
           retention-days: 30
-          if-no-files-found: warn
