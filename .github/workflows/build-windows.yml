@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Read version from installer script
         id: version
@@ -48,12 +48,12 @@ jobs:
           }
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Cache npm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ hashFiles('web/package-lock.json') }}
@@ -61,7 +61,7 @@ jobs:
             ${{ runner.os }}-npm-
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@v5
         with:
           dotnet-version: '8.0.x'
 
@@ -190,7 +190,7 @@ jobs:
           }
 
       - name: Upload installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: IfcTesterRevit-Setup-v${{ steps.version.outputs.app_version }}
           path: installer-output/IfcTesterRevit-Setup-*.exe
@@ -202,7 +202,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Read version from Archicad installer script
         id: version
@@ -219,12 +219,12 @@ jobs:
           }
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
           node-version: '22'
 
       - name: Cache npm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
           key: ${{ runner.os }}-npm-${{ hashFiles('web/package-lock.json') }}
@@ -408,7 +408,7 @@ jobs:
           }
 
       - name: Upload Archicad installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: IfcTesterArchiCAD-Setup-v${{ steps.version.outputs.app_version }}
           path: installer-output-archicad/IfcTesterArchiCAD-Setup-win-v*.exe
