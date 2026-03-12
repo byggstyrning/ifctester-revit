@@ -60,6 +60,29 @@ if (-not $SkipPackages) {
     else {
         Write-Warning "Download script not found, packages may need internet access at runtime"
     }
+    
+    # Verify critical wheel files exist before building
+    $binDir = Join-Path $paths.Web "public\worker\bin"
+    $requiredWheels = @(
+        "ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl",
+        "odfpy-1.4.2-py2.py3-none-any.whl"
+    )
+    $missingWheels = @()
+    foreach ($wheel in $requiredWheels) {
+        $wheelPath = Join-Path $binDir $wheel
+        if (-not (Test-Path $wheelPath)) {
+            $missingWheels += $wheel
+        }
+    }
+    if ($missingWheels.Count -gt 0) {
+        Write-ErrorMsg "Required wheel files missing from $binDir :"
+        foreach ($w in $missingWheels) {
+            Write-ErrorMsg "  - $w"
+        }
+        Write-ErrorMsg "Run the download script manually or check your internet connection."
+        exit 1
+    }
+    Write-Success "All required wheel files verified"
     Write-Host ""
 }
 

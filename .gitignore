@@ -37,7 +37,6 @@ cmake_install.cmake
 
 # Node modules
 **/node_modules/
-**/package-lock.json
 **/pnpm-lock.yaml
 
 # IDE

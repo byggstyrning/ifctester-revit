@@ -17,25 +17,9 @@ $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $WebDir = Split-Path -Parent $ScriptDir  # Go up from scripts/ to web/
 $BinDir = Join-Path $WebDir $OutputDir
 
-# Check for existing wheel files in the old project location
-$OldProjectBinDir = "C:\code\pyRevit Extensions\ifctester-next\public\worker\bin"
-
 # Ensure directory exists
 if (-not (Test-Path $BinDir)) {
     New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
-}
-
-# Copy existing wheel files from old project if they exist
-if (Test-Path $OldProjectBinDir) {
-    Write-Host "Checking for existing wheel files in old project..." -ForegroundColor Gray
-    $oldWheels = Get-ChildItem -Path $OldProjectBinDir -Filter "*.whl" -ErrorAction SilentlyContinue
-    foreach ($wheel in $oldWheels) {
-        $destPath = Join-Path $BinDir $wheel.Name
-        if (-not (Test-Path $destPath)) {
-            Write-Host "  Copying $($wheel.Name) from old project..." -ForegroundColor Gray
-            Copy-Item -Path $wheel.FullName -Destination $destPath -Force
-        }
-    }
 }
 
 # Get latest ifctester version from PyPI
@@ -61,29 +45,9 @@ try {
     $ifctesterFileName = "ifctester-0.8.3-py3-none-any.whl"
 }
 
-# Get latest odfpy version from PyPI
-Write-Host "Checking latest odfpy version..." -ForegroundColor Gray
-try {
-    $odfpyResponse = Invoke-RestMethod -Uri "https://pypi.org/pypi/odfpy/json" -ErrorAction Stop
-    # Filter to only numeric versions (x.y.z format)
-    $validVersions = $odfpyResponse.releases.PSObject.Properties.Name | Where-Object { $_ -match '^\d+\.\d+\.\d+$' } | Sort-Object { [version]$_ } -Descending
-    $odfpyVersion = $validVersions[0]
-    $odfpyFiles = $odfpyResponse.releases.$odfpyVersion
-    $odfpyWheel = $odfpyFiles | Where-Object { $_.filename -like "*.whl" } | Select-Object -First 1
-    
-    if ($odfpyWheel) {
-        $odfpyUrl = $odfpyWheel.url
-        $odfpyFileName = $odfpyWheel.filename
-        Write-Host "  Found odfpy version $odfpyVersion" -ForegroundColor Green
-    } else {
-        throw "No wheel file found for odfpy $odfpyVersion"
-    }
-} catch {
-    Write-Host "  WARNING: Could not fetch odfpy version info, using fallback" -ForegroundColor Yellow
-    # Use a known working URL pattern - odfpy wheels are typically universal
-    $odfpyUrl = "https://files.pythonhosted.org/packages/py2.py3/o/odfpy/odfpy-1.4.1-py2.py3-none-any.whl"
-    $odfpyFileName = "odfpy-1.4.1-py2.py3-none-any.whl"
-}
+# odfpy - PyPI does not publish wheels, use the custom wheel from IfcOpenShell repo
+$odfpyUrl = "https://raw.githubusercontent.com/IfcOpenShell/IfcOpenShell/v0.8.0/src/ifctester/webapp/public/worker/bin/odfpy-1.4.2-py2.py3-none-any.whl"
+$odfpyFileName = "odfpy-1.4.2-py2.py3-none-any.whl"
 
 # Packages to download
 $packages = @(
@@ -95,21 +59,17 @@ $packages = @(
     },
     @{
         Name = "ifcopenshell"
-        # Try multiple possible URLs - ifcopenshell wheels may be in different locations
+        # Official source: IfcOpenShell/wasm-wheels repo (Pyodide-compatible wheels)
         Urls = @(
-            "https://github.com/IfcOpenShell/IfcOpenShell/releases/download/v0.8.3/ifcopenshell-0.8.3+bb329af-cp313-cp313-emscripten_4_0_9_wasm32.whl",
-            "https://github.com/IfcOpenShell/IfcOpenShell/releases/download/v0.8.3/ifcopenshell-0.8.3-cp313-cp313-emscripten_wasm32.whl",
-            "https://github.com/IfcOpenShell/IfcOpenShell/releases/download/v0.8.3/ifcopenshell-0.8.3-emscripten_wasm32.whl"
+            "https://raw.githubusercontent.com/IfcOpenShell/wasm-wheels/main/ifcopenshell-0.8.3%2B34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
         )
-        FileName = "ifcopenshell-0.8.3+bb329af-cp313-cp313-emscripten_4_0_9_wasm32.whl"
-        Optional = $true  # Mark as optional since it may not be available
+        FileName = "ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
+        Optional = $false
     },
     @{
         Name = "odfpy"
-        # Accept both 1.4.1 and 1.4.2 versions
-        FileNames = @("odfpy-1.4.2-py2.py3-none-any.whl", "odfpy-1.4.1-py2.py3-none-any.whl", $odfpyFileName)
         Url = $odfpyUrl
-        FileName = "odfpy-1.4.2-py2.py3-none-any.whl"  # Prefer 1.4.2 if available
+        FileName = $odfpyFileName
         Optional = $false
     }
 )

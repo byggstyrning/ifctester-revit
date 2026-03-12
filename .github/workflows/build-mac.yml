@@ -42,7 +42,7 @@ jobs:
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
 
       - name: Read version from installer script
         id: version
@@ -56,25 +56,25 @@ jobs:
           echo "app_version=$version" >> $GITHUB_OUTPUT
 
       - name: Setup Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: '3.x'
 
       - name: Setup Node.js
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v5
         with:
-          node-version: '18'
+          node-version: '22'
 
       - name: Cache npm dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('web/package.json') }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('web/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
 
       - name: Install web dependencies
-        run: npm install
+        run: npm ci
         working-directory: web
 
       - name: Download Python packages for Pyodide
@@ -216,7 +216,7 @@ jobs:
           bash scripts/archicad/installer-mac.sh --skip-build --skip-web-build
 
       - name: Upload DMG installer
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: IfcTesterArchiCAD-Setup-mac-v${{ steps.version.outputs.app_version }}
           path: dist/IfcTesterArchiCAD-Setup-mac-v${{ steps.version.outputs.app_version }}.dmg
