@@ -99,13 +99,11 @@ async function initEnvironment() {
 
     const micropip = pyodide.pyimport('micropip');
 
-    // Install IfcOpenShell wheel (local) - try multiple known filenames.
+    // Install IfcOpenShell wheel (local) - must match Pyodide's Emscripten version.
     try {
         const wheelCandidates = [
             config.wasm.wheel_url,
-            "/worker/bin/ifcopenshell-0.8.3+bb329af-cp313-cp313-emscripten_4_0_9_wasm32.whl",
-            "/worker/bin/ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl",
-            "/worker/bin/ifcopenshell-0.8.3-cp313-cp313-emscripten_wasm32.whl"
+            "/worker/bin/ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
         ];
         const ifcopenshellUrls = [...new Set(wheelCandidates.map(resolveUrl))];
         await installFromCandidateUrls(micropip, ifcopenshellUrls, "IfcOpenShell");

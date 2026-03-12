@@ -95,14 +95,12 @@ $packages = @(
     },
     @{
         Name = "ifcopenshell"
-        # Try multiple possible URLs - ifcopenshell wheels may be in different locations
+        # Official source: IfcOpenShell/wasm-wheels repo (Pyodide-compatible wheels)
         Urls = @(
-            "https://github.com/IfcOpenShell/IfcOpenShell/releases/download/v0.8.3/ifcopenshell-0.8.3+bb329af-cp313-cp313-emscripten_4_0_9_wasm32.whl",
-            "https://github.com/IfcOpenShell/IfcOpenShell/releases/download/v0.8.3/ifcopenshell-0.8.3-cp313-cp313-emscripten_wasm32.whl",
-            "https://github.com/IfcOpenShell/IfcOpenShell/releases/download/v0.8.3/ifcopenshell-0.8.3-emscripten_wasm32.whl"
+            "https://raw.githubusercontent.com/IfcOpenShell/wasm-wheels/main/ifcopenshell-0.8.3%2B34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
         )
-        FileName = "ifcopenshell-0.8.3+bb329af-cp313-cp313-emscripten_4_0_9_wasm32.whl"
-        Optional = $true  # Mark as optional since it may not be available
+        FileName = "ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
+        Optional = $false
     },
     @{
         Name = "odfpy"
