@@ -64,7 +64,8 @@ if (-not $SkipPackages) {
     # Verify critical wheel files exist before building
     $binDir = Join-Path $paths.Web "public\worker\bin"
     $requiredWheels = @(
-        "ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
+        "ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl",
+        "odfpy-1.4.2-py2.py3-none-any.whl"
     )
     $missingWheels = @()
     foreach ($wheel in $requiredWheels) {
