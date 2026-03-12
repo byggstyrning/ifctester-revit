@@ -69,12 +69,12 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.npm
-          key: ${{ runner.os }}-npm-${{ hashFiles('web/package.json') }}
+          key: ${{ runner.os }}-npm-${{ hashFiles('web/package-lock.json') }}
           restore-keys: |
             ${{ runner.os }}-npm-
 
       - name: Install web dependencies
-        run: npm install
+        run: npm ci
         working-directory: web
 
       - name: Download Python packages for Pyodide
