@@ -2,7 +2,7 @@
 ; Supports Revit 2025 and 2026
 
 #define AppName "IfcTester Revit"
-#define AppVersion "1.2.4"
+#define AppVersion "1.2.5"
 #define AppPublisher "Byggstyrning"
 #define AppPublisherURL "https://byggstyrning.se"
 #define AppId "{{3EEEF746-55D7-4E99-B04A-15A9ED3AE4F4}"

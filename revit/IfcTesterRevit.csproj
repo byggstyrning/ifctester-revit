@@ -58,7 +58,7 @@
         <Company>Byggstyrning</Company>
         <Product>IfcTester Revit</Product>
         <Authors>Jonatan Jacobsson</Authors>
-        <Version>1.2.4</Version>
+        <Version>1.2.5</Version>
     </PropertyGroup>
 
     <ItemGroup>

@@ -37,9 +37,8 @@ public class Application : ExternalApplication
     }
 
     /// <summary>
-    /// Called from StartupCommand when the user first opens the panel.
-    /// Starts the HTTP server and initializes WebView2 on demand so that
-    /// WebView2 native DLLs are not loaded into the process until needed.
+    /// Called when the user opens the panel. Creates WebView2 and starts the
+    /// HTTP server on demand.
     /// </summary>
     public static void EnsureWebViewAndServer(UIApplication uiApp)
     {
@@ -52,6 +51,23 @@ public class Application : ExternalApplication
         {
             _apiServer = new RevitApiServer(48881);
             _apiServer.Start(uiApp);
+        }
+    }
+
+    /// <summary>
+    /// Called when the user hides the panel. Destroys WebView2 and stops the
+    /// HTTP server so that native browser threads are removed from the Revit
+    /// process, preventing crashes with add-ins like External Data Manager.
+    /// </summary>
+    public static void TearDownWebViewAndServer()
+    {
+        _dockableView?.DestroyWebView();
+
+        if (_apiServer != null)
+        {
+            _apiServer.Stop();
+            _apiServer.Dispose();
+            _apiServer = null;
         }
     }
 

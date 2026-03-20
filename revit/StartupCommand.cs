@@ -5,7 +5,8 @@ using Nice3point.Revit.Toolkit.External;
 namespace IfcTesterRevit;
 
 /// <summary>
-///     External command entry point
+///     External command entry point. Toggles the dockable pane and manages
+///     the WebView2 lifecycle: created on show, destroyed on hide.
 /// </summary>
 [UsedImplicitly]
 [Transaction(TransactionMode.Manual)]
@@ -24,6 +25,7 @@ public class StartupCommand : ExternalCommand
             }
             else
             {
+                IfcTesterRevit.Application.TearDownWebViewAndServer();
                 panel.Hide();
             }
         }

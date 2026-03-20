@@ -9,6 +9,8 @@ namespace IfcTesterRevit.Views;
 /// does not probe or load WebView2 assemblies when the class is instantiated
 /// at Revit startup. All browser work is delegated to <see cref="WebViewHost"/>
 /// which is only touched after the user explicitly opens the panel.
+/// Supports full create/destroy cycles to keep WebView2 out of Revit when the
+/// panel is hidden.
 /// </summary>
 public sealed class IfcTesterRevitView : UserControl
 {
@@ -21,18 +23,7 @@ public sealed class IfcTesterRevitView : UserControl
     {
         _grid = new System.Windows.Controls.Grid();
         _grid.Background = System.Windows.Media.Brushes.White;
-
-        _grid.Children.Add(new TextBlock
-        {
-            Text = "Click the IfcTester button to load the panel.",
-            VerticalAlignment = VerticalAlignment.Center,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            TextWrapping = TextWrapping.Wrap,
-            FontSize = 14,
-            Foreground = System.Windows.Media.Brushes.Gray,
-            Margin = new Thickness(20)
-        });
-
+        ShowPlaceholder();
         Content = _grid;
     }
 
@@ -45,6 +36,16 @@ public sealed class IfcTesterRevitView : UserControl
         WebViewHost.CreateAndAttach(_grid);
     }
 
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    public void DestroyWebView()
+    {
+        if (!_initialized) return;
+        _initialized = false;
+        WebViewHost.DestroyAndDetach();
+        _grid.Children.Clear();
+        ShowPlaceholder();
+    }
+
     public void SuspendWebView()
     {
         if (!_initialized) return;
@@ -55,6 +56,20 @@ public sealed class IfcTesterRevitView : UserControl
     {
         if (!_initialized) return;
         ResumeCore();
+    }
+
+    private void ShowPlaceholder()
+    {
+        _grid.Children.Add(new TextBlock
+        {
+            Text = "Click the IfcTester button to load the panel.",
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 14,
+            Foreground = System.Windows.Media.Brushes.Gray,
+            Margin = new Thickness(20)
+        });
     }
 
     [MethodImpl(MethodImplOptions.NoInlining)]

@@ -10,15 +10,19 @@ namespace IfcTesterRevit.Views;
 
 /// <summary>
 /// Isolates all WebView2 types into a single class so that the CLR only loads
-/// WebView2 assemblies when this class is first referenced at runtime, which
-/// happens only when the user explicitly opens the IfcTester panel.
+/// WebView2 assemblies when this class is first referenced at runtime.
+/// Supports full create/destroy cycles: WebView2 is disposed when the panel is
+/// hidden and recreated when shown, keeping the native browser process out of
+/// Revit when not needed (avoids crash with External Data Manager).
 /// </summary>
 internal static class WebViewHost
 {
     private static WebView2? _webView;
+    private static System.Windows.Controls.Grid? _parentGrid;
 
     public static void CreateAndAttach(System.Windows.Controls.Grid grid)
     {
+        _parentGrid = grid;
         var webUrl = WebAppConfig.GetWebAppUrl();
 
         var webView = new WebView2
@@ -80,6 +84,30 @@ internal static class WebViewHost
         };
 
         grid.Children.Add(webView);
+    }
+
+    /// <summary>
+    /// Fully destroys the WebView2 control and its browser process so that
+    /// native WebView2 threads are no longer running inside Revit.
+    /// </summary>
+    public static void DestroyAndDetach()
+    {
+        if (_webView == null) return;
+
+        var webView = _webView;
+        _webView = null;
+
+        try
+        {
+            if (_parentGrid != null)
+                _parentGrid.Children.Remove(webView);
+
+            webView.Dispose();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error disposing WebView2: {ex.Message}");
+        }
     }
 
     public static void Suspend()
