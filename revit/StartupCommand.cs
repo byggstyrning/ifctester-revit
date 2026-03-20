@@ -19,7 +19,7 @@ public class StartupCommand : ExternalCommand
         {
             if (!panel.IsShown())
             {
-                Application.EnsureWebViewAndServer(UiApplication);
+                IfcTesterRevit.Application.EnsureWebViewAndServer(UiApplication);
                 panel.Show();
             }
             else
