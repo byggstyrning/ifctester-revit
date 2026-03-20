@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.Wpf;
@@ -9,39 +10,66 @@ namespace IfcTesterRevit.Views;
 public sealed class IfcTesterRevitView : UserControl
 {
     private readonly string WebUrl = WebAppConfig.GetWebAppUrl();
+    private WebView2? _webView;
+
+    /// <summary>
+    /// Collapses the WebView2 control and pauses its native renderer to prevent
+    /// crashes when Revit or third-party add-ins open WPF windows. WebView2's
+    /// multi-process renderer can hit native assertion failures during WPF
+    /// focus/layout changes triggered by dialogs.
+    /// </summary>
+    public void SuspendWebView()
+    {
+        if (_webView == null) return;
+
+        _webView.Visibility = System.Windows.Visibility.Collapsed;
+
+        try
+        {
+            if (_webView.CoreWebView2?.Environment != null)
+                _webView.CoreWebView2.TrySuspendAsync();
+        }
+        catch { }
+    }
+
+    public void ResumeWebView()
+    {
+        if (_webView == null) return;
+
+        try
+        {
+            _webView.CoreWebView2?.Resume();
+        }
+        catch { }
+
+        _webView.Visibility = System.Windows.Visibility.Visible;
+    }
 
     public IfcTesterRevitView()
     {
         var grid = new System.Windows.Controls.Grid();
         grid.Background = System.Windows.Media.Brushes.White;
 
-        // Create WebView2 control
         var webView = new WebView2
         {
-            VerticalAlignment = System.Windows.VerticalAlignment.Stretch,
-            HorizontalAlignment = System.Windows.HorizontalAlignment.Stretch
+            VerticalAlignment = VerticalAlignment.Stretch,
+            HorizontalAlignment = HorizontalAlignment.Stretch
         };
+        _webView = webView;
 
-        // Navigate to the URL when the control is loaded
         webView.Loaded += async (sender, e) =>
         {
             try
             {
-                // Create user data folder path in AppData
                 var userDataFolder = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                     "IfcTesterRevit",
                     "WebView2"
                 );
 
-                // Ensure directory exists
                 Directory.CreateDirectory(userDataFolder);
 
-                // Create environment options
-                var environmentOptions = new CoreWebView2EnvironmentOptions
-                {
-                    AdditionalBrowserArguments = "--disable-web-security --allow-running-insecure-content"
-                };
+                var environmentOptions = new CoreWebView2EnvironmentOptions();
 
                 // Create environment with user data folder
                 var environment = await CoreWebView2Environment.CreateAsync(
