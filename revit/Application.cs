@@ -1,5 +1,4 @@
 using System.Linq;
-using System.Windows;
 using Autodesk.Revit.UI;
 using Autodesk.Revit.UI.Events;
 using Nice3point.Revit.Toolkit.Decorators;
@@ -18,7 +17,6 @@ public class Application : ExternalApplication
     private static RevitApiServer? _apiServer;
     private static IfcTesterRevitView? _dockableView;
     private bool _webViewSuspended;
-    private int _openWindowCount;
 
     public override void OnStartup()
     {
@@ -27,13 +25,6 @@ public class Application : ExternalApplication
 
         Context.UiControlledApplication.DialogBoxShowing += OnDialogBoxShowing;
         Context.UiControlledApplication.Idling += OnIdling;
-
-        EventManager.RegisterClassHandler(
-            typeof(Window), Window.LoadedEvent,
-            new RoutedEventHandler(OnAnyWindowLoaded));
-        EventManager.RegisterClassHandler(
-            typeof(Window), Window.UnloadedEvent,
-            new RoutedEventHandler(OnAnyWindowUnloaded));
     }
 
     public override void OnShutdown()
@@ -70,32 +61,9 @@ public class Application : ExternalApplication
         _webViewSuspended = true;
     }
 
-    private void OnAnyWindowLoaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is Window w && w != System.Windows.Application.Current?.MainWindow)
-        {
-            _openWindowCount++;
-            _dockableView?.SuspendWebView();
-            _webViewSuspended = true;
-        }
-    }
-
-    private void OnAnyWindowUnloaded(object sender, RoutedEventArgs e)
-    {
-        if (sender is Window w && w != System.Windows.Application.Current?.MainWindow)
-        {
-            _openWindowCount = Math.Max(0, _openWindowCount - 1);
-            if (_openWindowCount == 0)
-            {
-                _dockableView?.ResumeWebView();
-                _webViewSuspended = false;
-            }
-        }
-    }
-
     private void OnIdling(object? sender, IdlingEventArgs e)
     {
-        if (_webViewSuspended && _openWindowCount == 0)
+        if (_webViewSuspended)
         {
             _dockableView?.ResumeWebView();
             _webViewSuspended = false;
