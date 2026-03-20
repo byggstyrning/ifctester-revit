@@ -1,4 +1,4 @@
-﻿using Autodesk.Revit.Attributes;
+using Autodesk.Revit.Attributes;
 using Autodesk.Revit.UI;
 using Nice3point.Revit.Toolkit.External;
 
@@ -19,6 +19,7 @@ public class StartupCommand : ExternalCommand
         {
             if (!panel.IsShown())
             {
+                Application.EnsureWebViewAndServer(UiApplication);
                 panel.Show();
             }
             else

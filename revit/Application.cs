@@ -24,16 +24,10 @@ public class Application : ExternalApplication
     {
         CreateRibbon();
         CreateDockablePane();
-        
-        _apiServer = new RevitApiServer(48881);
-        _apiServer.Start(Context.UiApplication);
 
         Context.UiControlledApplication.DialogBoxShowing += OnDialogBoxShowing;
         Context.UiControlledApplication.Idling += OnIdling;
 
-        // WPF class-level hooks catch windows from overridden commands
-        // (e.g. External Data Manager's "Manage Links" dialog) that bypass
-        // Revit's DialogBoxShowing event entirely.
         EventManager.RegisterClassHandler(
             typeof(Window), Window.LoadedEvent,
             new RoutedEventHandler(OnAnyWindowLoaded));
@@ -49,6 +43,25 @@ public class Application : ExternalApplication
 
         _apiServer?.Stop();
         _apiServer?.Dispose();
+    }
+
+    /// <summary>
+    /// Called from StartupCommand when the user first opens the panel.
+    /// Starts the HTTP server and initializes WebView2 on demand so that
+    /// WebView2 native DLLs are not loaded into the process until needed.
+    /// </summary>
+    public static void EnsureWebViewAndServer(UIApplication uiApp)
+    {
+        if (_dockableView != null && !_dockableView.IsWebViewInitialized)
+        {
+            _dockableView.InitializeWebView();
+        }
+
+        if (_apiServer == null)
+        {
+            _apiServer = new RevitApiServer(48881);
+            _apiServer.Start(uiApp);
+        }
     }
 
     private void OnDialogBoxShowing(object? sender, DialogBoxShowingEventArgs e)
@@ -91,7 +104,6 @@ public class Application : ExternalApplication
 
     private void CreateRibbon()
     {
-        // Use Tab enum instead of string - Tab.AddIns is the correct way
         RibbonPanel? existingPanel = null;
         
         try
@@ -101,7 +113,6 @@ public class Application : ExternalApplication
         }
         catch
         {
-            // Panel doesn't exist yet, will create it
         }
         
         RibbonPanel panel;
@@ -111,11 +122,9 @@ public class Application : ExternalApplication
         }
         else
         {
-            // Create new "Audit" panel in Add-ins tab using Tab enum
             panel = Context.UiControlledApplication.CreateRibbonPanel(Tab.AddIns, "Audit");
         }
 
-        // Add the button to the panel
         var pushButtonData = new PushButtonData(
             "IfcTester",
             "IfcTester",

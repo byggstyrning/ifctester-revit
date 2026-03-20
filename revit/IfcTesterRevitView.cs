@@ -10,45 +10,57 @@ namespace IfcTesterRevit.Views;
 public sealed class IfcTesterRevitView : UserControl
 {
     private readonly string WebUrl = WebAppConfig.GetWebAppUrl();
+    private System.Windows.Controls.Grid _grid;
     private WebView2? _webView;
+    private bool _initialized;
 
-    /// <summary>
-    /// Collapses the WebView2 control and pauses its native renderer to prevent
-    /// crashes when Revit or third-party add-ins open WPF windows. WebView2's
-    /// multi-process renderer can hit native assertion failures during WPF
-    /// focus/layout changes triggered by dialogs.
-    /// </summary>
+    public bool IsWebViewInitialized => _initialized;
+
     public void SuspendWebView()
     {
         if (_webView == null) return;
-
         _webView.Visibility = System.Windows.Visibility.Collapsed;
-
-        try
-        {
-            if (_webView.CoreWebView2?.Environment != null)
-                _webView.CoreWebView2.TrySuspendAsync();
-        }
-        catch { }
+        try { _webView.CoreWebView2?.TrySuspendAsync(); } catch { }
     }
 
     public void ResumeWebView()
     {
         if (_webView == null) return;
-
-        try
-        {
-            _webView.CoreWebView2?.Resume();
-        }
-        catch { }
-
+        try { _webView.CoreWebView2?.Resume(); } catch { }
         _webView.Visibility = System.Windows.Visibility.Visible;
     }
 
     public IfcTesterRevitView()
     {
-        var grid = new System.Windows.Controls.Grid();
-        grid.Background = System.Windows.Media.Brushes.White;
+        _grid = new System.Windows.Controls.Grid();
+        _grid.Background = System.Windows.Media.Brushes.White;
+
+        var placeholder = new TextBlock
+        {
+            Text = "Click the IfcTester button to load the panel.",
+            VerticalAlignment = VerticalAlignment.Center,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            TextWrapping = TextWrapping.Wrap,
+            FontSize = 14,
+            Foreground = System.Windows.Media.Brushes.Gray,
+            Margin = new Thickness(20)
+        };
+        _grid.Children.Add(placeholder);
+
+        Content = _grid;
+    }
+
+    /// <summary>
+    /// Creates the WebView2 control on first use. Deferring initialization keeps
+    /// WebView2's native DLLs out of the Revit process until they're actually
+    /// needed, avoiding conflicts with add-ins like External Data Manager.
+    /// </summary>
+    public void InitializeWebView()
+    {
+        if (_initialized) return;
+        _initialized = true;
+
+        _grid.Children.Clear();
 
         var webView = new WebView2
         {
@@ -71,29 +83,24 @@ public sealed class IfcTesterRevitView : UserControl
 
                 var environmentOptions = new CoreWebView2EnvironmentOptions();
 
-                // Create environment with user data folder
                 var environment = await CoreWebView2Environment.CreateAsync(
                     userDataFolder: userDataFolder,
                     options: environmentOptions
                 );
 
-                // Set the environment before ensuring CoreWebView2
                 await webView.EnsureCoreWebView2Async(environment);
 
-                // Configure settings to allow local network access
                 if (webView.CoreWebView2 != null)
                 {
                     webView.CoreWebView2.Settings.AreBrowserAcceleratorKeysEnabled = true;
                     webView.CoreWebView2.Settings.IsWebMessageEnabled = true;
                     webView.CoreWebView2.Settings.AreDefaultScriptDialogsEnabled = true;
                     
-                    // Set up virtual host mapping for local file serving
                     var webAppFolder = WebAppConfig.GetWebAppFolder();
                     if (webAppFolder != null && Directory.Exists(webAppFolder))
                     {
                         try
                         {
-                            // Map virtual host to local folder for serving built web app
                             webView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                                 "app.localhost",
                                 webAppFolder,
@@ -101,15 +108,10 @@ public sealed class IfcTesterRevitView : UserControl
                             );
                             System.Diagnostics.Debug.WriteLine($"Mapped app.localhost to {webAppFolder}");
                             
-                            // Add CORS headers to responses from app.localhost
-                            // This is needed for Pyodide to fetch wheel files from the virtual host
-                            // We intercept requests for files that need CORS (wheel files, etc.)
-                            // IMPORTANT: Add filter BEFORE setting up the handler
                             webView.CoreWebView2.AddWebResourceRequestedFilter("*app.localhost*", CoreWebView2WebResourceContext.All);
                             
                             webView.CoreWebView2.WebResourceRequested += (sender, args) =>
                             {
-                                // Only handle app.localhost requests
                                 if (args.Request != null && args.Request.Uri != null && args.Request.Uri.StartsWith("http://app.localhost"))
                                 {
                                     try
@@ -118,31 +120,24 @@ public sealed class IfcTesterRevitView : UserControl
                                         System.Diagnostics.Debug.WriteLine($"[CORS] Intercepted request: {requestUri}");
                                         
                                         var uri = new Uri(requestUri);
-                                        // Decode the path to handle URL encoding (e.g., + becomes space, %2B becomes +)
-                                        // But we need to be careful - + in filenames should stay as +
                                         var absolutePath = uri.AbsolutePath.TrimStart('/');
                                         var relativePath = absolutePath.Replace('/', Path.DirectorySeparatorChar);
                                         
                                         System.Diagnostics.Debug.WriteLine($"[CORS] Decoded relative path: {relativePath}");
                                         
-                                        // Only intercept files that need CORS headers (wheel files, worker files)
-                                        // Let other files use the virtual host mapping normally
                                         var needsCors = relativePath.EndsWith(".whl", StringComparison.OrdinalIgnoreCase) ||
                                                       relativePath.Contains("worker", StringComparison.OrdinalIgnoreCase) ||
                                                       relativePath.Contains("pyodide", StringComparison.OrdinalIgnoreCase);
                                         
                                         if (!needsCors)
                                         {
-                                            // Let the request pass through to virtual host mapping
                                             System.Diagnostics.Debug.WriteLine($"[CORS] Passing through (no CORS needed): {relativePath}");
                                             return;
                                         }
                                         
-                                        // Handle OPTIONS preflight requests
                                         if (args.Request.Method == "OPTIONS")
                                         {
                                             System.Diagnostics.Debug.WriteLine($"[CORS] Handling OPTIONS preflight for: {relativePath}");
-                                            // Headers must be formatted as a single string with CRLF line endings
                                             var headers = "Access-Control-Allow-Origin: *\r\n" +
                                                          "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
                                                          "Access-Control-Allow-Headers: Content-Type\r\n" +
@@ -153,14 +148,10 @@ public sealed class IfcTesterRevitView : UserControl
                                             return;
                                         }
                                         
-                                        // For GET requests, read the file and serve it with CORS headers
                                         var filePath = Path.Combine(webAppFolder, relativePath);
-                                        
-                                        // Normalize path separators
                                         filePath = Path.GetFullPath(filePath);
                                         
                                         System.Diagnostics.Debug.WriteLine($"[CORS] Looking for file: {filePath}");
-                                        System.Diagnostics.Debug.WriteLine($"[CORS] Web app folder: {webAppFolder}");
                                         System.Diagnostics.Debug.WriteLine($"[CORS] File exists: {File.Exists(filePath)}");
                                         
                                         if (filePath == null || filePath.Contains("../") || filePath.Contains(@"..\"))
@@ -170,12 +161,9 @@ public sealed class IfcTesterRevitView : UserControl
                                         if (File.Exists(filePath))
                                         {
                                             System.Diagnostics.Debug.WriteLine($"[CORS] Serving file with CORS headers: {filePath}");
-                                            // Read the file content as a stream
                                             var fileStream = File.OpenRead(filePath);
                                             var contentType = GetContentType(filePath);
                                             
-                                            // Create response with CORS headers
-                                            // Headers must be formatted as a single string with CRLF line endings
                                             var responseHeaders = "Access-Control-Allow-Origin: *\r\n" +
                                                                  "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
                                                                  "Access-Control-Allow-Headers: Content-Type\r\n" +
@@ -188,7 +176,6 @@ public sealed class IfcTesterRevitView : UserControl
                                         else
                                         {
                                             System.Diagnostics.Debug.WriteLine($"[CORS] File not found: {filePath}");
-                                            // List available files for debugging
                                             if (filePath == null || filePath.Contains("../") || filePath.Contains(@"..\"))
                                             {
                                                 throw new ArgumentException("Invalid file path");
@@ -200,7 +187,6 @@ public sealed class IfcTesterRevitView : UserControl
                                                 System.Diagnostics.Debug.WriteLine($"[CORS] Available .whl files in directory: {string.Join(", ", availableFiles.Select(f => Path.GetFileName(f)))}");
                                             }
                                             
-                                            // Return 404 with CORS headers so the error is clear
                                             var errorHeaders = "Access-Control-Allow-Origin: *\r\n" +
                                                              "Access-Control-Allow-Methods: GET, POST, OPTIONS\r\n" +
                                                              "Access-Control-Allow-Headers: Content-Type\r\n" +
@@ -215,7 +201,6 @@ public sealed class IfcTesterRevitView : UserControl
                                     catch (Exception ex)
                                     {
                                         System.Diagnostics.Debug.WriteLine($"[CORS] Error handling request: {ex.Message}\n{ex.StackTrace}");
-                                        // Return error with CORS headers
                                         try
                                         {
                                             var errorHeaders = "Access-Control-Allow-Origin: *\r\n" +
@@ -230,13 +215,11 @@ public sealed class IfcTesterRevitView : UserControl
                                         }
                                         catch
                                         {
-                                            // If we can't create error response, let it pass through
                                         }
                                     }
                                 }
                             };
                             
-                            // Helper method to determine content type
                             string GetContentType(string filePath)
                             {
                                 var extension = Path.GetExtension(filePath).ToLowerInvariant();
@@ -260,35 +243,25 @@ public sealed class IfcTesterRevitView : UserControl
                         }
                     }
                     
-                    // Set up navigation completed handler to inject API URL
                     webView.CoreWebView2.NavigationCompleted += async (sender, args) =>
                     {
                         if (args.IsSuccess)
                         {
                             try
                             {
-                                // Inject JavaScript to set the API URL parameter
                                 var apiUrl = WebAppConfig.GetApiUrl();
                                 var script = $@"
                                     (function() {{
-                                        // Check if API URL is already set in URL params
                                         const urlParams = new URLSearchParams(window.location.search);
                                         if (!urlParams.get('api')) {{
-                                            // Add API URL parameter pointing to localhost Revit API
                                             urlParams.set('api', '{apiUrl}');
                                             const newUrl = window.location.pathname + '?' + urlParams.toString();
                                             window.history.replaceState({{}}, '', newUrl);
-                                            
-                                            // Trigger a custom event to notify the app
                                             window.dispatchEvent(new CustomEvent('revitApiUrlSet', {{ 
                                                 detail: {{ apiUrl: '{apiUrl}' }} 
                                             }}));
                                         }}
-                                        
-                                        // Also set a global variable for immediate access
                                         window.__REVIT_API_URL__ = '{apiUrl}';
-                                        
-                                        // If Revit module exists, update it
                                         if (window.Revit) {{
                                             window.Revit.apiUrl = '{apiUrl}';
                                             window.Revit.enabled = true;
@@ -305,20 +278,16 @@ public sealed class IfcTesterRevitView : UserControl
                         }
                     };
                     
-                    // Navigate to the URL
-                    // If using local files, add API parameter to URL
                     var apiUrl = WebAppConfig.GetApiUrl();
                     string urlToNavigate;
                     
                     if (WebUrl.StartsWith("http://app.localhost"))
                     {
-                        // Local file serving - add launch source + API parameter
                         var separator = WebUrl.Contains("?") ? "&" : "?";
                         urlToNavigate = $"{WebUrl}{separator}source=revit&api={Uri.EscapeDataString(apiUrl)}";
                     }
                     else
                     {
-                        // Remote URL (dev server) - add launch source + API parameter
                         var separator = WebUrl.Contains("?") ? "&" : "?";
                         urlToNavigate = $"{WebUrl}{separator}source=revit&api={Uri.EscapeDataString(apiUrl)}";
                     }
@@ -326,23 +295,21 @@ public sealed class IfcTesterRevitView : UserControl
                     webView.CoreWebView2.Navigate(urlToNavigate);
                 }
             }
-            catch (System.Exception ex)
+            catch (Exception ex)
             {
-                // If WebView2 fails, show error message
                 var errorText = new TextBlock
                 {
                     Text = $"Error loading web page: {ex.Message}\n\nURL: {WebUrl}",
-                    VerticalAlignment = System.Windows.VerticalAlignment.Center,
-                    HorizontalAlignment = System.Windows.HorizontalAlignment.Center,
-                    TextWrapping = System.Windows.TextWrapping.Wrap,
-                    Margin = new System.Windows.Thickness(20)
+                    VerticalAlignment = VerticalAlignment.Center,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    TextWrapping = TextWrapping.Wrap,
+                    Margin = new Thickness(20)
                 };
-                grid.Children.Clear();
-                grid.Children.Add(errorText);
+                _grid.Children.Clear();
+                _grid.Children.Add(errorText);
             }
         };
 
-        Content = grid;
-        grid.Children.Add(webView);
+        _grid.Children.Add(webView);
     }
 }
