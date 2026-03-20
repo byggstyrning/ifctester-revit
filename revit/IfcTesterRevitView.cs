@@ -69,7 +69,13 @@ public sealed class IfcTesterRevitView : UserControl
 
                 Directory.CreateDirectory(userDataFolder);
 
-                var environmentOptions = new CoreWebView2EnvironmentOptions();
+                var environmentOptions = new CoreWebView2EnvironmentOptions
+                {
+                    // Disable GPU acceleration to prevent crashes during Revit modal loops.
+                    // WebView2's GPU process can conflict with Revit's hardware acceleration
+                    // and trigger STATUS_BREAKPOINT assertions when windows are created/destroyed.
+                    AdditionalBrowserArguments = "--disable-gpu"
+                };
 
                 // Create environment with user data folder
                 var environment = await CoreWebView2Environment.CreateAsync(
