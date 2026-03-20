@@ -1,7 +1,6 @@
 using System.Linq;
 using Autodesk.Revit.UI;
 using Nice3point.Revit.Toolkit.External;
-using IfcTesterRevit.Views;
 
 namespace IfcTesterRevit;
 
@@ -12,7 +11,7 @@ namespace IfcTesterRevit;
 public class Application : ExternalApplication
 {
     private static RevitApiServer? _apiServer;
-    private static IfcTesterWindow? _window;
+    private static int _port = 48881;
 
     public override void OnStartup()
     {
@@ -21,35 +20,30 @@ public class Application : ExternalApplication
 
     public override void OnShutdown()
     {
-        try { _window?.ForceClose(); } catch { }
-        _window = null;
-
         _apiServer?.Stop();
         _apiServer?.Dispose();
     }
 
-    public static void ToggleWindow(UIApplication uiApp)
+    /// <summary>
+    /// Starts the HTTP server (if not already running) and opens the web app
+    /// in the user's default browser. This avoids loading WebView2 (Chromium)
+    /// DLLs into Revit's process, which conflict with Revit's built-in CefSharp
+    /// and crash the External Data Manager (Manage Links).
+    /// </summary>
+    public static void OpenInBrowser(UIApplication uiApp)
     {
-        if (_window != null && _window.IsVisible)
-        {
-            _window.Hide();
-            return;
-        }
-
         if (_apiServer == null)
         {
-            _apiServer = new RevitApiServer(48881);
+            _apiServer = new RevitApiServer(_port);
             _apiServer.Start(uiApp);
         }
 
-        if (_window == null)
+        var url = $"http://localhost:{_port}/?source=revit&api=http%3A%2F%2Flocalhost%3A{_port}";
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
         {
-            _window = new IfcTesterWindow();
-            _window.Owner = null;
-        }
-
-        _window.Show();
-        _window.Activate();
+            FileName = url,
+            UseShellExecute = true
+        });
     }
 
     private void CreateRibbon()

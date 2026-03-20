@@ -58,7 +58,7 @@
         <Company>Byggstyrning</Company>
         <Product>IfcTester Revit</Product>
         <Authors>Jonatan Jacobsson</Authors>
-        <Version>1.2.6</Version>
+        <Version>1.2.2</Version>
     </PropertyGroup>
 
     <ItemGroup>
@@ -72,8 +72,8 @@
         <!-- MVVM -->
         <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.0" />
         
-        <!-- WebView2 -->
-        <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.2957.106" />
+        <!-- WebView2 removed: its Chromium DLLs conflict with Revit's CefSharp (libcef.dll).
+             The web app is now served via the HTTP server and opened in the user's default browser. -->
     </ItemGroup>
     
     <ItemGroup>

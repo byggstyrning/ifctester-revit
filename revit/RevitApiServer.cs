@@ -1171,7 +1171,7 @@ public class RevitApiServer : IDisposable
             }
             else
             {
-                await SendError(response, 404, "Not Found");
+                await ServeStaticFile(request, response, path);
             }
         }
         catch (Exception ex)
@@ -1277,7 +1277,7 @@ public class RevitApiServer : IDisposable
             status = configsReady ? "ok" : "initializing",
             connected = true,
             configsReady = configsReady,
-            version = "1.2.6"
+            version = "1.2.2"
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(status);
@@ -1601,6 +1601,83 @@ public class RevitApiServer : IDisposable
         catch (Exception ex)
         {
             await SendError(response, 500, $"Failed to read export file: {ex.Message}");
+        }
+    }
+
+    private async Task ServeStaticFile(HttpListenerRequest request, HttpListenerResponse response, string path)
+    {
+        var webAppFolder = WebAppConfig.GetWebAppFolder();
+        if (webAppFolder == null || !Directory.Exists(webAppFolder))
+        {
+            await SendError(response, 404, "Web app not found");
+            return;
+        }
+
+        var relativePath = path.TrimStart('/');
+        if (string.IsNullOrEmpty(relativePath) || relativePath == "/")
+            relativePath = "index.html";
+
+        if (relativePath.Contains("..") || relativePath.Contains(':'))
+        {
+            await SendError(response, 403, "Forbidden");
+            return;
+        }
+
+        relativePath = relativePath.Replace('/', Path.DirectorySeparatorChar);
+        var filePath = Path.GetFullPath(Path.Combine(webAppFolder, relativePath));
+        var canonicalBase = Path.GetFullPath(webAppFolder + Path.DirectorySeparatorChar);
+
+        if (!filePath.StartsWith(canonicalBase))
+        {
+            await SendError(response, 403, "Forbidden");
+            return;
+        }
+
+        if (!File.Exists(filePath))
+        {
+            var indexPath = Path.Combine(webAppFolder, "index.html");
+            if (File.Exists(indexPath))
+                filePath = indexPath;
+            else
+            {
+                await SendError(response, 404, "Not Found");
+                return;
+            }
+        }
+
+        try
+        {
+            var ext = Path.GetExtension(filePath).ToLowerInvariant();
+            response.ContentType = ext switch
+            {
+                ".html" => "text/html; charset=utf-8",
+                ".js" => "application/javascript",
+                ".mjs" => "application/javascript",
+                ".css" => "text/css",
+                ".json" => "application/json",
+                ".png" => "image/png",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".gif" => "image/gif",
+                ".svg" => "image/svg+xml",
+                ".ico" => "image/x-icon",
+                ".wasm" => "application/wasm",
+                ".whl" => "application/zip",
+                ".py" => "text/x-python",
+                ".woff" => "font/woff",
+                ".woff2" => "font/woff2",
+                ".ttf" => "font/ttf",
+                _ => "application/octet-stream"
+            };
+            response.StatusCode = 200;
+
+            var fileBytes = await File.ReadAllBytesAsync(filePath);
+            response.ContentLength64 = fileBytes.Length;
+            await response.OutputStream.WriteAsync(fileBytes, 0, fileBytes.Length);
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Error serving static file: {ex.Message}");
+            await SendError(response, 500, "Internal Server Error");
         }
     }
 
