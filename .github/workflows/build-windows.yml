@@ -108,18 +108,19 @@ jobs:
 
           Write-Host "Found publish dir: $($publishAddinDir.FullName)"
 
-          # Copy plugin files to staging
+          # Copy plugin files to staging (robocopy handles deep paths reliably)
           $stagingPluginDir = Join-Path $stagingDir "IfcTesterRevit"
-          Copy-Item -Path "$($publishAddinDir.FullName)\IfcTesterRevit\*" -Destination $stagingPluginDir -Recurse -Force
+          $pluginSrc = "$($publishAddinDir.FullName)\IfcTesterRevit"
+          robocopy "$pluginSrc" "$stagingPluginDir" /E /NJH /NJS /NFL /NDL /NP
+          if ($LASTEXITCODE -ge 8) { Write-Error "robocopy failed with exit code $LASTEXITCODE"; exit 1 }
 
           # Clean up unnecessary files
           Get-ChildItem -Path $stagingPluginDir -Filter "WebAec*" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
           Get-ChildItem -Path $stagingPluginDir -Filter "*.addin" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 
           # Copy web app into staging
-          $stagingWebDir = Join-Path $stagingPluginDir "web"
-          New-Item -ItemType Directory -Path $stagingWebDir -Force | Out-Null
-          Copy-Item -Path "web\dist\*" -Destination $stagingWebDir -Recurse -Force
+          robocopy "web\dist" "$stagingPluginDir\web" /E /NJH /NJS /NFL /NDL /NP
+          if ($LASTEXITCODE -ge 8) { Write-Error "robocopy failed with exit code $LASTEXITCODE"; exit 1 }
 
           # Report staging contents
           $stats = Get-ChildItem $stagingDir -Recurse -File | Measure-Object -Property Length -Sum
