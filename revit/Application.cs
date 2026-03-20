@@ -1,8 +1,6 @@
-﻿using System.Linq;
+using System.Linq;
 using Autodesk.Revit.UI;
-using Nice3point.Revit.Toolkit.Decorators;
 using Nice3point.Revit.Toolkit.External;
-using IfcTesterRevit.Views;
 
 namespace IfcTesterRevit;
 
@@ -12,31 +10,46 @@ namespace IfcTesterRevit;
 [UsedImplicitly]
 public class Application : ExternalApplication
 {
-    public static Guid DockablePaneId = new("0FD2B40B-B3FA-4676-92A0-BC3F71E2059D");
     private static RevitApiServer? _apiServer;
+    private static int _port = 48881;
 
     public override void OnStartup()
     {
         CreateRibbon();
-        CreateDockablePane();
-        
-        // Start the Revit API server
-        _apiServer = new RevitApiServer(48881);
-        _apiServer.Start(Context.UiApplication);
     }
 
     public override void OnShutdown()
     {
-        // Stop the API server when Revit shuts down
         _apiServer?.Stop();
         _apiServer?.Dispose();
     }
 
+    /// <summary>
+    /// Starts the HTTP server (if not already running) and opens the web app
+    /// in the user's default browser. This avoids loading WebView2 (Chromium)
+    /// DLLs into Revit's process, which conflict with Revit's built-in CefSharp
+    /// and crash the External Data Manager (Manage Links).
+    /// </summary>
+    public static void OpenInBrowser(UIApplication uiApp)
+    {
+        if (_apiServer == null)
+        {
+            _apiServer = new RevitApiServer(_port);
+            _apiServer.Start(uiApp);
+        }
+
+        var url = $"http://localhost:{_port}/?source=revit&api=http%3A%2F%2Flocalhost%3A{_port}";
+        System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+        {
+            FileName = url,
+            UseShellExecute = true
+        });
+    }
+
     private void CreateRibbon()
     {
-        // Use Tab enum instead of string - Tab.AddIns is the correct way
         RibbonPanel? existingPanel = null;
-        
+
         try
         {
             var panels = Context.UiControlledApplication.GetRibbonPanels(Tab.AddIns);
@@ -44,9 +57,8 @@ public class Application : ExternalApplication
         }
         catch
         {
-            // Panel doesn't exist yet, will create it
         }
-        
+
         RibbonPanel panel;
         if (existingPanel != null)
         {
@@ -54,11 +66,9 @@ public class Application : ExternalApplication
         }
         else
         {
-            // Create new "Audit" panel in Add-ins tab using Tab enum
             panel = Context.UiControlledApplication.CreateRibbonPanel(Tab.AddIns, "Audit");
         }
 
-        // Add the button to the panel
         var pushButtonData = new PushButtonData(
             "IfcTester",
             "IfcTester",
@@ -74,25 +84,5 @@ public class Application : ExternalApplication
         );
 
         panel.AddItem(pushButtonData);
-    }
-
-    private void CreateDockablePane()
-    {
-        if (!DockablePane.PaneIsRegistered(new DockablePaneId(DockablePaneId)))
-            {
-                // Register the dockable pane
-                DockablePaneProvider
-                    .Register(Context.UiControlledApplication, DockablePaneId, "IfcTester")
-                    .SetConfiguration((data) =>
-                    {
-                        data.FrameworkElement = new IfcTesterRevitView();
-                        data.InitialState = new DockablePaneState
-                        {
-                            DockPosition = DockPosition.Right,
-                            MinimumHeight = 900,
-                            MinimumWidth = 450,
-                        };
-                    });
-            }
     }
 }
