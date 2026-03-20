@@ -108,7 +108,8 @@ jobs:
 
           Write-Host "Found publish dir: $($publishAddinDir.FullName)"
 
-          # Copy plugin files to staging (robocopy handles deep paths reliably)
+          # Copy plugin files to staging (robocopy handles deep paths reliably;
+          # exit codes 0-7 are success, >=8 is failure)
           $stagingPluginDir = Join-Path $stagingDir "IfcTesterRevit"
           $pluginSrc = "$($publishAddinDir.FullName)\IfcTesterRevit"
           robocopy "$pluginSrc" "$stagingPluginDir" /E /NJH /NJS /NFL /NDL /NP
@@ -121,6 +122,7 @@ jobs:
           # Copy web app into staging
           robocopy "web\dist" "$stagingPluginDir\web" /E /NJH /NJS /NFL /NDL /NP
           if ($LASTEXITCODE -ge 8) { Write-Error "robocopy failed with exit code $LASTEXITCODE"; exit 1 }
+          $global:LASTEXITCODE = 0
 
           # Report staging contents
           $stats = Get-ChildItem $stagingDir -Recurse -File | Measure-Object -Property Length -Sum
