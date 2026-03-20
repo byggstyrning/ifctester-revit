@@ -1,7 +1,5 @@
 using System.Linq;
 using Autodesk.Revit.UI;
-using Autodesk.Revit.UI.Events;
-using Nice3point.Revit.Toolkit.Decorators;
 using Nice3point.Revit.Toolkit.External;
 using IfcTesterRevit.Views;
 
@@ -13,38 +11,29 @@ namespace IfcTesterRevit;
 [UsedImplicitly]
 public class Application : ExternalApplication
 {
-    public static Guid DockablePaneId = new("0FD2B40B-B3FA-4676-92A0-BC3F71E2059D");
     private static RevitApiServer? _apiServer;
-    private static IfcTesterRevitView? _dockableView;
-    private bool _webViewSuspended;
+    private static IfcTesterWindow? _window;
 
     public override void OnStartup()
     {
         CreateRibbon();
-        CreateDockablePane();
-
-        Context.UiControlledApplication.DialogBoxShowing += OnDialogBoxShowing;
-        Context.UiControlledApplication.Idling += OnIdling;
     }
 
     public override void OnShutdown()
     {
-        Context.UiControlledApplication.DialogBoxShowing -= OnDialogBoxShowing;
-        Context.UiControlledApplication.Idling -= OnIdling;
+        try { _window?.ForceClose(); } catch { }
+        _window = null;
 
         _apiServer?.Stop();
         _apiServer?.Dispose();
     }
 
-    /// <summary>
-    /// Called when the user opens the panel. Creates WebView2 and starts the
-    /// HTTP server on demand.
-    /// </summary>
-    public static void EnsureWebViewAndServer(UIApplication uiApp)
+    public static void ToggleWindow(UIApplication uiApp)
     {
-        if (_dockableView != null && !_dockableView.IsWebViewInitialized)
+        if (_window != null && _window.IsVisible)
         {
-            _dockableView.InitializeWebView();
+            _window.Hide();
+            return;
         }
 
         if (_apiServer == null)
@@ -52,44 +41,21 @@ public class Application : ExternalApplication
             _apiServer = new RevitApiServer(48881);
             _apiServer.Start(uiApp);
         }
-    }
 
-    /// <summary>
-    /// Called when the user hides the panel. Destroys WebView2 and stops the
-    /// HTTP server so that native browser threads are removed from the Revit
-    /// process, preventing crashes with add-ins like External Data Manager.
-    /// </summary>
-    public static void TearDownWebViewAndServer()
-    {
-        _dockableView?.DestroyWebView();
-
-        if (_apiServer != null)
+        if (_window == null)
         {
-            _apiServer.Stop();
-            _apiServer.Dispose();
-            _apiServer = null;
+            _window = new IfcTesterWindow();
+            _window.Owner = null;
         }
-    }
 
-    private void OnDialogBoxShowing(object? sender, DialogBoxShowingEventArgs e)
-    {
-        _dockableView?.SuspendWebView();
-        _webViewSuspended = true;
-    }
-
-    private void OnIdling(object? sender, IdlingEventArgs e)
-    {
-        if (_webViewSuspended)
-        {
-            _dockableView?.ResumeWebView();
-            _webViewSuspended = false;
-        }
+        _window.Show();
+        _window.Activate();
     }
 
     private void CreateRibbon()
     {
         RibbonPanel? existingPanel = null;
-        
+
         try
         {
             var panels = Context.UiControlledApplication.GetRibbonPanels(Tab.AddIns);
@@ -98,7 +64,7 @@ public class Application : ExternalApplication
         catch
         {
         }
-        
+
         RibbonPanel panel;
         if (existingPanel != null)
         {
@@ -124,25 +90,5 @@ public class Application : ExternalApplication
         );
 
         panel.AddItem(pushButtonData);
-    }
-
-    private void CreateDockablePane()
-    {
-        if (!DockablePane.PaneIsRegistered(new DockablePaneId(DockablePaneId)))
-        {
-            _dockableView = new IfcTesterRevitView();
-            DockablePaneProvider
-                .Register(Context.UiControlledApplication, DockablePaneId, "IfcTester")
-                .SetConfiguration((data) =>
-                {
-                    data.FrameworkElement = _dockableView;
-                    data.InitialState = new DockablePaneState
-                    {
-                        DockPosition = DockPosition.Right,
-                        MinimumHeight = 900,
-                        MinimumWidth = 450,
-                    };
-                });
-        }
     }
 }
