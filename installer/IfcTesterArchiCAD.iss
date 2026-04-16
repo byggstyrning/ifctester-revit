@@ -7,7 +7,7 @@
 ; - Configure ArchiCAD to load the add-on
 
 #define MyAppName "IfcTester for ArchiCAD"
-#define MyAppVersion "1.2.2"
+#define MyAppVersion "1.3.0"
 #define MyAppPublisher "Byggstyrning"
 #define MyAppURL "https://github.com/example/ifctester"
 

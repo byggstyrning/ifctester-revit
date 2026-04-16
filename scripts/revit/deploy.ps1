@@ -2,7 +2,7 @@
 # Builds and deploys to local Revit Add-ins folder for development
 
 param(
-    [ValidateSet("Debug R25", "Debug R26", "Release R25", "Release R26")]
+    [ValidateSet("Debug R25", "Debug R26", "Debug R27", "Release R25", "Release R26", "Release R27")]
     [string]$Configuration = "Debug R25",
     
     [switch]$SkipBuild,
@@ -15,7 +15,12 @@ param(
 $paths = Get-ProjectPaths
 
 # Determine Revit version from configuration
-$revitYear = if ($Configuration -match "R25") { "2025" } else { "2026" }
+$revitYear = switch -Regex ($Configuration) {
+    "R25" { "2025" }
+    "R26" { "2026" }
+    "R27" { "2027" }
+    default { "2025" }
+}
 $deployDir = "$env:APPDATA\Autodesk\Revit\Addins\$revitYear\IfcTesterRevit"
 
 Write-Header "IfcTester Revit - Deploy"

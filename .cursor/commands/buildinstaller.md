@@ -6,7 +6,7 @@ This command instructs Cursor to build Windows installers for the IfcTester plug
 ## When to Use
 Run this command when you need to:
 - Build Windows installers (.exe) for distribution to users
-- Create Release builds for Revit 2025/2026 and ArchiCAD 29
+- Create Release builds for Revit 2025/2026/2027 and ArchiCAD 29
 - Package the plugins and web app into installers
 
 ## Quick Reference
@@ -41,7 +41,8 @@ $env:ARCHICAD_API_DEVKIT = "C:\code\archicad-api\API.Development.Kit.WIN.29.3100
 - **Node.js and npm** for web app build
 
 ### Revit
-- **.NET SDK 8.0** for plugin build
+- **.NET SDK 8.0** for Revit 2025/2026 plugin build
+- **.NET SDK 10.0** for Revit 2027 plugin build
 
 ### ArchiCAD
 - **Visual Studio 2022** with C++ desktop workload (v143 toolset)
@@ -77,15 +78,23 @@ dotnet build "IfcTesterRevit.csproj" -c "Release R25" --no-incremental /p:Deploy
 dotnet publish "IfcTesterRevit.csproj" -c "Release R25" /p:DeployRevitAddin=false
 dotnet build "IfcTesterRevit.csproj" -c "Release R26" --no-incremental /p:DeployRevitAddin=false
 dotnet publish "IfcTesterRevit.csproj" -c "Release R26" /p:DeployRevitAddin=false
+dotnet build "IfcTesterRevit.csproj" -c "Release R27" --no-incremental /p:DeployRevitAddin=false
+dotnet publish "IfcTesterRevit.csproj" -c "Release R27" /p:DeployRevitAddin=false
 Pop-Location
 
-# Prepare staging directory
+# Prepare staging directory (R25/R26 share, R27 is separate because of net10.0-windows)
 $StagingDir = "C:\code\ifctester-revit\installer\staging"
 if (Test-Path $StagingDir) { Remove-Item $StagingDir -Recurse -Force }
 New-Item -ItemType Directory -Path $StagingDir -Force | Out-Null
-Copy-Item -Path "C:\code\ifctester-revit\revit\bin\Release R25\publish\*" -Destination "$StagingDir\IfcTesterRevit" -Recurse -Force
-Get-ChildItem -Path "$StagingDir\IfcTesterRevit" -Filter "*.addin" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+
+$r25Publish = (Get-ChildItem "C:\code\ifctester-revit\revit\bin\Release R25\publish" -Directory -Filter "*addin" | Select-Object -First 1).FullName
+$r27Publish = (Get-ChildItem "C:\code\ifctester-revit\revit\bin\Release R27\publish" -Directory -Filter "*addin" | Select-Object -First 1).FullName
+
+Copy-Item -Path "$r25Publish\IfcTesterRevit\*" -Destination "$StagingDir\IfcTesterRevit" -Recurse -Force
+Copy-Item -Path "$r27Publish\IfcTesterRevit\*" -Destination "$StagingDir\IfcTesterRevit-R27" -Recurse -Force
+Get-ChildItem -Path $StagingDir -Filter "*.addin" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
 Copy-Item -Path "C:\code\ifctester-revit\web\dist\*" -Destination "$StagingDir\IfcTesterRevit\web" -Recurse -Force
+Copy-Item -Path "C:\code\ifctester-revit\web\dist\*" -Destination "$StagingDir\IfcTesterRevit-R27\web" -Recurse -Force
 
 # Generate .addin files
 $GeneratedDir = "C:\code\ifctester-revit\installer\generated"
@@ -94,6 +103,7 @@ $Template = Get-Content "C:\code\ifctester-revit\installer\templates\IfcTesterRe
 $Addin = $Template -replace '\{ASSEMBLY_PATH\}', 'IfcTesterRevit\IfcTesterRevit.dll'
 $Addin | Out-File "$GeneratedDir\IfcTesterRevit.2025.addin" -Encoding UTF8 -NoNewline
 $Addin | Out-File "$GeneratedDir\IfcTesterRevit.2026.addin" -Encoding UTF8 -NoNewline
+$Addin | Out-File "$GeneratedDir\IfcTesterRevit.2027.addin" -Encoding UTF8 -NoNewline
 
 # Run Inno Setup
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/OC:\code\ifctester-revit\dist" "C:\code\ifctester-revit\installer\IfcTesterRevit.iss"

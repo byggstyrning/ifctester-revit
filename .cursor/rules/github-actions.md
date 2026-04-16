@@ -9,7 +9,7 @@ This project uses GitHub Actions to build plugins for Revit (Windows) and ArchiC
 ```
 ifctester-revit/
 ├── web/            Svelte/Vite web app (shared by all plugins)
-├── revit/          Revit C# plugin (.NET 8 / .NET Framework 4.8)
+├── revit/          Revit C# plugin (.NET Framework 4.8 for R21-R24, .NET 8 for R25/R26, .NET 10 for R27)
 ├── archicad/       ArchiCAD C++ add-on (CMake)
 ├── installer/      Inno Setup scripts + templates
 ├── dist/           Local installer output (gitignored contents mixed with tracked old exes)
@@ -29,13 +29,14 @@ ifctester-revit/
 2. **Read version** → Extract `AppVersion` from `installer/IfcTesterRevit.iss` for artifact naming
 3. **Setup Node.js 18** → `actions/setup-node@v4` (no built-in cache, see gotchas)
 4. **Cache npm** → `actions/cache@v4` keyed on `web/package.json`
-5. **Setup .NET 8** → `actions/setup-dotnet@v4`
+5. **Setup .NET 8 + .NET 10** → `actions/setup-dotnet@v5` (R25/R26 build on .NET 8, R27 on .NET 10)
 6. **npm install** → `web/` directory (not `npm ci`, see gotchas)
 7. **Download Pyodide packages** → Runs `web/scripts/download-packages.ps1` to fetch Python wheels
 8. **Build web app** → `npm run build` in `web/`
 9. **Build Revit R25** → `dotnet build -c "Release R25"`
 10. **Build Revit R26** → `dotnet build -c "Release R26"`
-11. **Prepare staging** → Copy publish output + web dist into `installer/staging/`
+11. **Build Revit R27** → `dotnet build -c "Release R27"` (.NET 10)
+12. **Prepare staging** → Copy R25 publish output into `installer/staging/IfcTesterRevit` and R27 publish output into `installer/staging/IfcTesterRevit-R27`, plus web dist
 12. **Generate .addin files** → Template substitution from `installer/templates/`
 13. **Install Inno Setup** → `choco install innosetup`
 14. **Compile installer** → `ISCC.exe` outputs to clean `installer-output/` directory
@@ -105,7 +106,7 @@ From successful Run #6 (`build-windows.yml`):
 - Total: ~2.5 minutes
 - Setup (.NET + Node.js): ~45s
 - Web build (install + download + build): ~45s
-- Revit build (R25 + R26): ~30s
+- Revit build (R25 + R26 + R27): ~50s
 - Installer (Inno Setup install + compile): ~30s
 
 ## Trigger Configuration

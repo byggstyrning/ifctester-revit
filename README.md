@@ -139,8 +139,8 @@ See [ArchiCAD Add-On Documentation](archicad/README.md) for detailed instruction
 ### Revit Plugin (Windows only)
 
 - **Windows 10/11** (64-bit)
-- **.NET SDK 8.0+** - [Download here](https://dotnet.microsoft.com/)
-- **Autodesk Revit 2021-2026**
+- **.NET SDK 8.0+** (Revit 2025/2026) and/or **.NET SDK 10.0+** (Revit 2027) - [Download here](https://dotnet.microsoft.com/)
+- **Autodesk Revit 2021-2027**
 - **WebView2 Runtime** (usually pre-installed)
 
 ### ArchiCAD Add-On (Windows & macOS)
@@ -229,7 +229,7 @@ All scripts are in the `scripts/` folder with a consistent structure:
 
 ### Common Parameters
 
-- `-Configuration`: Build configuration (`Debug R25`, `Release R26`, etc.)
+- `-Configuration`: Build configuration (`Debug R25`, `Debug R26`, `Debug R27`, `Release R25`, `Release R26`, `Release R27`)
 - `-SkipBuild`: Skip build step (deploy only)
 - `-SkipWebBuild`: Skip web app build
 

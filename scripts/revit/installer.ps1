@@ -28,7 +28,7 @@ $stagingDir = Join-Path $paths.Installer "staging"
 $generatedDir = Join-Path $paths.Installer "generated"
 $certificatePath = Join-Path $paths.Installer "certificate\IfcTesterRevit.pfx"
 
-$totalSteps = 7
+$totalSteps = 8
 $step = 0
 
 # Step 1: Certificate check
@@ -97,7 +97,25 @@ finally {
 }
 Write-Host ""
 
-# Step 5: Prepare staging
+# Step 5: Build Revit R27
+$step++
+Write-Step $step $totalSteps "Building Revit plugin (Release R27)..."
+
+Push-Location $paths.Revit
+try {
+    dotnet build "IfcTesterRevit.csproj" -c "Release R27" --no-incremental
+    if ($LASTEXITCODE -ne 0) {
+        Write-ErrorMsg "R27 build failed"
+        exit 1
+    }
+    Write-Success "R27 built successfully"
+}
+finally {
+    Pop-Location
+}
+Write-Host ""
+
+# Step 6: Prepare staging
 $step++
 Write-Step $step $totalSteps "Preparing staging directory..."
 
@@ -106,34 +124,63 @@ if (Test-Path $stagingDir) {
 }
 New-Item -ItemType Directory -Path $stagingDir -Force | Out-Null
 
-# Copy R25 build as base
-$r25PublishDir = Join-Path $paths.Revit "bin\Release R25\publish"
-$publishAddinDir = Get-ChildItem -Path $r25PublishDir -Directory -Filter "*addin" | Select-Object -First 1
+# Helper: stage a built Revit plugin into a given folder (net-version specific)
+function Copy-RevitStaging {
+    param(
+        [Parameter(Mandatory = $true)][string]$PublishRoot,
+        [Parameter(Mandatory = $true)][string]$DestinationDir,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
 
-if (-not $publishAddinDir) {
-    Write-ErrorMsg "Could not find R25 publish directory"
-    exit 1
+    $publishAddin = Get-ChildItem -Path $PublishRoot -Directory -Filter "*addin" -ErrorAction SilentlyContinue | Select-Object -First 1
+    if (-not $publishAddin) {
+        Write-ErrorMsg "Could not find $Label publish directory under $PublishRoot"
+        exit 1
+    }
+
+    $pluginSrc = Join-Path $publishAddin.FullName "IfcTesterRevit"
+    if (-not (Test-Path $pluginSrc)) {
+        Write-ErrorMsg "$Label publish did not contain IfcTesterRevit folder"
+        exit 1
+    }
+
+    if (-not (Test-Path $DestinationDir)) {
+        New-Item -ItemType Directory -Path $DestinationDir -Force | Out-Null
+    }
+    Copy-Item -Path "$pluginSrc\*" -Destination $DestinationDir -Recurse -Force
+
+    # Drop CI-only / unused artefacts
+    Get-ChildItem -Path $DestinationDir -Filter "WebAec*" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+    Get-ChildItem -Path $DestinationDir -Filter "*.addin" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
+
+    # Bundle the web app
+    $webDistDir = Join-Path $paths.Web "dist"
+    $stagingWebDir = Join-Path $DestinationDir "web"
+    if (Test-Path $webDistDir) {
+        if (Test-Path $stagingWebDir) { Remove-Item $stagingWebDir -Recurse -Force }
+        New-Item -ItemType Directory -Path $stagingWebDir -Force | Out-Null
+        Copy-Item -Path "$webDistDir\*" -Destination $stagingWebDir -Recurse -Force
+    }
 }
 
+# R25/R26 share the same net8.0-windows build; stage once into IfcTesterRevit
 $stagingPluginDir = Join-Path $stagingDir "IfcTesterRevit"
-Copy-Item -Path "$($publishAddinDir.FullName)\*" -Destination $stagingPluginDir -Recurse -Force
+Copy-RevitStaging `
+    -PublishRoot (Join-Path $paths.Revit "bin\Release R25\publish") `
+    -DestinationDir $stagingPluginDir `
+    -Label "R25"
 
-# Clean up
-Get-ChildItem -Path $stagingPluginDir -Filter "WebAec*" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
-Get-ChildItem -Path $stagingPluginDir -Filter "*.addin" -Recurse | Remove-Item -Force -ErrorAction SilentlyContinue
-
-# Copy web app
-$webDistDir = Join-Path $paths.Web "dist"
-$stagingWebDir = Join-Path $stagingPluginDir "web"
-if (Test-Path $webDistDir) {
-    New-Item -ItemType Directory -Path $stagingWebDir -Force | Out-Null
-    Copy-Item -Path "$webDistDir\*" -Destination $stagingWebDir -Recurse -Force
-}
+# R27 targets net10.0-windows, stage it separately
+$stagingPluginDirR27 = Join-Path $stagingDir "IfcTesterRevit-R27"
+Copy-RevitStaging `
+    -PublishRoot (Join-Path $paths.Revit "bin\Release R27\publish") `
+    -DestinationDir $stagingPluginDirR27 `
+    -Label "R27"
 
 Write-Success "Staging prepared"
 Write-Host ""
 
-# Step 6: Generate .addin files
+# Step 7: Generate .addin files
 $step++
 Write-Step $step $totalSteps "Generating .addin files..."
 
@@ -154,7 +201,12 @@ if (Test-Path $templatePath) {
     $r26Content = $templateContent -replace '\{ASSEMBLY_PATH\}', 'IfcTesterRevit\IfcTesterRevit.dll'
     $r26Content | Out-File -FilePath (Join-Path $generatedDir "IfcTesterRevit.2026.addin") -Encoding UTF8 -NoNewline
     Write-Info "Generated IfcTesterRevit.2026.addin"
-    
+
+    # R27
+    $r27Content = $templateContent -replace '\{ASSEMBLY_PATH\}', 'IfcTesterRevit\IfcTesterRevit.dll'
+    $r27Content | Out-File -FilePath (Join-Path $generatedDir "IfcTesterRevit.2027.addin") -Encoding UTF8 -NoNewline
+    Write-Info "Generated IfcTesterRevit.2027.addin"
+
     Write-Success ".addin files generated"
 }
 else {
@@ -162,7 +214,7 @@ else {
 }
 Write-Host ""
 
-# Step 7: Compile installer
+# Step 8: Compile installer
 $step++
 Write-Step $step $totalSteps "Compiling installer..."
 

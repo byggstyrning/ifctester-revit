@@ -1277,7 +1277,7 @@ public class RevitApiServer : IDisposable
             status = configsReady ? "ok" : "initializing",
             connected = true,
             configsReady = configsReady,
-            version = "1.2.2"
+            version = "1.3.0"
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(status);

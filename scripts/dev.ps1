@@ -39,9 +39,11 @@ function Show-RevitMenu {
     Write-Host ""
     Write-Host "    [1] Build (Debug R25)" -ForegroundColor White
     Write-Host "    [2] Build (Debug R26)" -ForegroundColor White
-    Write-Host "    [3] Deploy (Debug R25)" -ForegroundColor White
-    Write-Host "    [4] Deploy (Debug R26)" -ForegroundColor White
-    Write-Host "    [5] Build Installer (Release)" -ForegroundColor White
+    Write-Host "    [3] Build (Debug R27)" -ForegroundColor White
+    Write-Host "    [4] Deploy (Debug R25)" -ForegroundColor White
+    Write-Host "    [5] Deploy (Debug R26)" -ForegroundColor White
+    Write-Host "    [6] Deploy (Debug R27)" -ForegroundColor White
+    Write-Host "    [7] Build Installer (Release)" -ForegroundColor White
     Write-Host ""
     Write-Host "    [B] Back" -ForegroundColor Gray
     Write-Host "    [Q] Quit" -ForegroundColor Gray
@@ -85,12 +87,18 @@ function Invoke-RevitAction {
             & "$ScriptDir\revit\build.ps1" -Configuration "Debug R26"
         }
         "3" {
-            & "$ScriptDir\revit\deploy.ps1" -Configuration "Debug R25"
+            & "$ScriptDir\revit\build.ps1" -Configuration "Debug R27"
         }
         "4" {
-            & "$ScriptDir\revit\deploy.ps1" -Configuration "Debug R26"
+            & "$ScriptDir\revit\deploy.ps1" -Configuration "Debug R25"
         }
         "5" {
+            & "$ScriptDir\revit\deploy.ps1" -Configuration "Debug R26"
+        }
+        "6" {
+            & "$ScriptDir\revit\deploy.ps1" -Configuration "Debug R27"
+        }
+        "7" {
             & "$ScriptDir\revit\installer.ps1"
         }
         default {
