@@ -52,7 +52,17 @@ source "$SCRIPT_DIR/../utils/common-mac.sh"
 
 # Version info
 APP_NAME="IfcTester for ArchiCAD"
-APP_VERSION="1.2.0"
+# Derive APP_VERSION from the canonical Inno Setup source so Windows
+# and macOS releases stay in lockstep.
+REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+ISS_FILE="$REPO_ROOT/installer/IfcTesterArchiCAD.iss"
+if [ -f "$ISS_FILE" ]; then
+    APP_VERSION="$(sed -n 's/^#define MyAppVersion "\([^"]*\)"/\1/p' "$ISS_FILE" | head -1)"
+fi
+if [ -z "${APP_VERSION:-}" ]; then
+    echo "Error: could not derive APP_VERSION from $ISS_FILE" >&2
+    exit 1
+fi
 DMG_NAME="IfcTesterArchiCAD-Setup-mac-v${APP_VERSION}"
 
 write_header "IfcTester ArchiCAD - Build Installer (macOS)"
