@@ -14,7 +14,8 @@ This directory contains the files needed to build Windows installers for the Ifc
 3. **Node.js and npm** - Required to build the web application
 
 ### Revit Plugin Requirements
-4. **.NET SDK 8.0** - Required to build the Revit plugin
+4. **.NET SDK 8.0** - Required to build the Revit plugin for Revit 2025/2026
+5. **.NET SDK 10.0** - Required to build the Revit plugin for Revit 2027
 
 ### ArchiCAD Add-On Requirements
 5. **Visual Studio 2022** with C++ desktop development workload
@@ -152,21 +153,27 @@ dotnet build "IfcTesterRevit.csproj" -c "Release R25" --no-incremental /p:Deploy
 dotnet publish "IfcTesterRevit.csproj" -c "Release R25" /p:DeployRevitAddin=false
 dotnet build "IfcTesterRevit.csproj" -c "Release R26" --no-incremental /p:DeployRevitAddin=false
 dotnet publish "IfcTesterRevit.csproj" -c "Release R26" /p:DeployRevitAddin=false
+dotnet build "IfcTesterRevit.csproj" -c "Release R27" --no-incremental /p:DeployRevitAddin=false
+dotnet publish "IfcTesterRevit.csproj" -c "Release R27" /p:DeployRevitAddin=false
 cd ..
 
 # 2. Prepare staging directory
+# R25/R26 share the net8.0-windows build; R27 uses a separate net10.0-windows build.
 $StagingDir = "installer\staging"
 if (Test-Path $StagingDir) { Remove-Item $StagingDir -Recurse -Force }
 New-Item -ItemType Directory -Path $StagingDir -Force
-Copy-Item -Path "revit\bin\Release R25\publish\*" -Destination "$StagingDir\IfcTesterRevit" -Recurse -Force
-Get-ChildItem -Path "$StagingDir\IfcTesterRevit" -Filter "*.addin" -Recurse | Remove-Item -Force
+Copy-Item -Path "revit\bin\Release R25\publish\*\IfcTesterRevit\*" -Destination "$StagingDir\IfcTesterRevit" -Recurse -Force
+Copy-Item -Path "revit\bin\Release R27\publish\*\IfcTesterRevit\*" -Destination "$StagingDir\IfcTesterRevit-R27" -Recurse -Force
+Get-ChildItem -Path $StagingDir -Filter "*.addin" -Recurse | Remove-Item -Force
 Copy-Item -Path "web\dist\*" -Destination "$StagingDir\IfcTesterRevit\web" -Recurse -Force
+Copy-Item -Path "web\dist\*" -Destination "$StagingDir\IfcTesterRevit-R27\web" -Recurse -Force
 
 # 3. Generate .addin files
 $Template = Get-Content "installer\templates\IfcTesterRevit.addin.template" -Raw
 $Addin = $Template -replace '\{ASSEMBLY_PATH\}', 'IfcTesterRevit\IfcTesterRevit.dll'
 $Addin | Out-File "installer\generated\IfcTesterRevit.2025.addin" -Encoding UTF8 -NoNewline
 $Addin | Out-File "installer\generated\IfcTesterRevit.2026.addin" -Encoding UTF8 -NoNewline
+$Addin | Out-File "installer\generated\IfcTesterRevit.2027.addin" -Encoding UTF8 -NoNewline
 
 # 4. Run Inno Setup
 & "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" "/Odist" "installer\IfcTesterRevit.iss"
@@ -201,8 +208,11 @@ cd ..
 ## Installation Paths
 
 ### Revit
-- **Revit 2025**: `%APPDATA%\Autodesk\Revit\Addins\2025\IfcTesterRevit\`
-- **Revit 2026**: `%APPDATA%\Autodesk\Revit\Addins\2026\IfcTesterRevit\`
+Starting with v1.2.0 the installer ships plugin files to the all-users location:
+
+- **Revit 2025**: `%ProgramData%\Autodesk\Revit\Addins\2025\IfcTesterRevit\`
+- **Revit 2026**: `%ProgramData%\Autodesk\Revit\Addins\2026\IfcTesterRevit\`
+- **Revit 2027**: `%ProgramData%\Autodesk\Revit\Addins\2027\IfcTesterRevit\`
 
 ### ArchiCAD
 - **ArchiCAD 29**: `%APPDATA%\Graphisoft\Add-Ons 29\IfcTesterArchiCAD\`
@@ -219,9 +229,11 @@ installer/
 │   └── IfcTesterRevit.pfx       # Code signing certificate (gitignored)
 ├── generated/                    # Generated files (created during build)
 │   ├── IfcTesterRevit.2025.addin
-│   └── IfcTesterRevit.2026.addin
+│   ├── IfcTesterRevit.2026.addin
+│   └── IfcTesterRevit.2027.addin
 ├── staging/                      # Staging directory (created during build)
-│   └── IfcTesterRevit/          # Plugin files ready for packaging
+│   ├── IfcTesterRevit/          # Plugin files for Revit 2025/2026 (net8.0-windows)
+│   └── IfcTesterRevit-R27/      # Plugin files for Revit 2027 (net10.0-windows)
 └── README.md                     # This file
 ```
 

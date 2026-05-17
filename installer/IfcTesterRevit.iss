@@ -1,8 +1,8 @@
 ; Inno Setup Script for IfcTester Revit Plugin
-; Supports Revit 2025 and 2026
+; Supports Revit 2025, 2026 and 2027
 
 #define AppName "IfcTester Revit"
-#define AppVersion "1.2.2"
+#define AppVersion "1.3.0"
 #define AppPublisher "Byggstyrning"
 #define AppPublisherURL "https://byggstyrning.se"
 #define AppId "{{3EEEF746-55D7-4E99-B04A-15A9ED3AE4F4}"
@@ -48,22 +48,29 @@ Name: "custom"; Description: "Custom installation"; Flags: iscustom
 [Components]
 Name: "revit2025"; Description: "Install for Revit 2025"; Types: full; Check: IsRevit2025Installed
 Name: "revit2026"; Description: "Install for Revit 2026"; Types: full; Check: IsRevit2026Installed
+Name: "revit2027"; Description: "Install for Revit 2027"; Types: full; Check: IsRevit2027Installed
 
 [Files]
-; Plugin files for Revit 2025
+; Plugin files for Revit 2025 (net8.0-windows build)
 Source: "staging\IfcTesterRevit\*"; DestDir: "{code:GetRevit2025AddinPath}\IfcTesterRevit"; Components: revit2025; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "generated\IfcTesterRevit.2025.addin"; DestDir: "{code:GetRevit2025AddinPath}"; DestName: "IfcTesterRevit.addin"; Components: revit2025; Flags: ignoreversion
 
-; Plugin files for Revit 2026
+; Plugin files for Revit 2026 (net8.0-windows build)
 Source: "staging\IfcTesterRevit\*"; DestDir: "{code:GetRevit2026AddinPath}\IfcTesterRevit"; Components: revit2026; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "generated\IfcTesterRevit.2026.addin"; DestDir: "{code:GetRevit2026AddinPath}"; DestName: "IfcTesterRevit.addin"; Components: revit2026; Flags: ignoreversion
+
+; Plugin files for Revit 2027 (net10.0-windows build)
+Source: "staging\IfcTesterRevit-R27\*"; DestDir: "{code:GetRevit2027AddinPath}\IfcTesterRevit"; Components: revit2027; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "generated\IfcTesterRevit.2027.addin"; DestDir: "{code:GetRevit2027AddinPath}"; DestName: "IfcTesterRevit.addin"; Components: revit2027; Flags: ignoreversion
 
 [Code]
 var
   Revit2025Installed: Boolean;
   Revit2026Installed: Boolean;
+  Revit2027Installed: Boolean;
   Revit2025AddinPath: string;
   Revit2026AddinPath: string;
+  Revit2027AddinPath: string;
 
 // Check if Revit is installed by querying the Windows Registry
 // This works for both standard and custom installation locations
@@ -206,13 +213,14 @@ begin
   // Detect Revit installations via registry (works with custom install locations)
   Revit2025Installed := IsRevitVersionInstalled(2025);
   Revit2026Installed := IsRevitVersionInstalled(2026);
-  
+  Revit2027Installed := IsRevitVersionInstalled(2027);
+
   // Check if at least one Revit version is installed
-  if (not Revit2025Installed) and (not Revit2026Installed) then
+  if (not Revit2025Installed) and (not Revit2026Installed) and (not Revit2027Installed) then
   begin
-    MsgBox('No supported Revit versions (2025 or 2026) were found installed on this system.' + #13#10 + #13#10 +
+    MsgBox('No supported Revit versions (2025, 2026 or 2027) were found installed on this system.' + #13#10 + #13#10 +
            'The installer checks the Windows Registry for Revit installations.' + #13#10 +
-           'Please install Revit 2025 or 2026 before installing this plugin.', mbError, MB_OK);
+           'Please install Revit 2025, 2026 or 2027 before installing this plugin.', mbError, MB_OK);
     Result := False;
   end
   else
@@ -222,6 +230,8 @@ begin
       Revit2025AddinPath := GetRevitAddinPath(2025);
     if Revit2026Installed then
       Revit2026AddinPath := GetRevitAddinPath(2026);
+    if Revit2027Installed then
+      Revit2027AddinPath := GetRevitAddinPath(2027);
     Result := True;
   end;
 end;
@@ -234,6 +244,11 @@ end;
 function IsRevit2026Installed(): Boolean;
 begin
   Result := Revit2026Installed;
+end;
+
+function IsRevit2027Installed(): Boolean;
+begin
+  Result := Revit2027Installed;
 end;
 
 function GetRevit2025AddinPath(Param: string): string;
@@ -252,6 +267,14 @@ begin
     Result := GetRevitAddinPath(2026);
 end;
 
+function GetRevit2027AddinPath(Param: string): string;
+begin
+  if Revit2027AddinPath <> '' then
+    Result := Revit2027AddinPath
+  else
+    Result := GetRevitAddinPath(2027);
+end;
+
 function InitializeUninstall(): Boolean;
 begin
   Result := True;
@@ -267,9 +290,11 @@ begin
       CleanupOldUserAddinFiles(2025);
     if WizardIsComponentSelected('revit2026') then
       CleanupOldUserAddinFiles(2026);
+    if WizardIsComponentSelected('revit2027') then
+      CleanupOldUserAddinFiles(2027);
 
     // Show a message about restarting Revit
-    if WizardIsComponentSelected('revit2025') or WizardIsComponentSelected('revit2026') then
+    if WizardIsComponentSelected('revit2025') or WizardIsComponentSelected('revit2026') or WizardIsComponentSelected('revit2027') then
     begin
       MsgBox('Installation complete!' + #13#10 +
              'Please restart Revit to load the IfcTester plugin.', mbInformation, MB_OK);
@@ -281,13 +306,15 @@ procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 var
   Revit2025AddinPath: string;
   Revit2026AddinPath: string;
+  Revit2027AddinPath: string;
 begin
   if CurUninstallStep = usUninstall then
   begin
     // Remove plugin files from the all-users ProgramData location
     Revit2025AddinPath := GetRevitAddinPath(2025);
     Revit2026AddinPath := GetRevitAddinPath(2026);
-    
+    Revit2027AddinPath := GetRevitAddinPath(2027);
+
     if Revit2025AddinPath <> '' then
     begin
       if DirExists(Revit2025AddinPath + '\IfcTesterRevit') then
@@ -295,7 +322,7 @@ begin
       if FileExists(Revit2025AddinPath + '\IfcTesterRevit.addin') then
         DeleteFile(Revit2025AddinPath + '\IfcTesterRevit.addin');
     end;
-    
+
     if Revit2026AddinPath <> '' then
     begin
       if DirExists(Revit2026AddinPath + '\IfcTesterRevit') then
@@ -304,10 +331,19 @@ begin
         DeleteFile(Revit2026AddinPath + '\IfcTesterRevit.addin');
     end;
 
+    if Revit2027AddinPath <> '' then
+    begin
+      if DirExists(Revit2027AddinPath + '\IfcTesterRevit') then
+        DelTree(Revit2027AddinPath + '\IfcTesterRevit', True, True, True);
+      if FileExists(Revit2027AddinPath + '\IfcTesterRevit.addin') then
+        DeleteFile(Revit2027AddinPath + '\IfcTesterRevit.addin');
+    end;
+
     // Also clean up legacy per-user files from old installer versions
     // Only reaches the current user's AppData
     CleanupOldUserAddinFiles(2025);
     CleanupOldUserAddinFiles(2026);
+    CleanupOldUserAddinFiles(2027);
   end;
 end;
 
