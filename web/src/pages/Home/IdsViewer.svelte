@@ -1,21 +1,31 @@
-<script>
-    import * as IDS from "$src/modules/api/ids.svelte.js";
-    import { getAuditReportById, downloadAuditReport } from "$src/modules/api/api.svelte.js";
-    import { error, success } from "$src/modules/utils/toast.svelte.js";
+<script lang="ts">
+    import * as IDS from "$src/modules/api/ids.svelte";
+    import { getAuditReportById, downloadAuditReport } from "$src/modules/api/api.svelte";
+    import { error, success } from "$src/modules/utils/toast.svelte";
     import * as Tooltip from "$src/lib/components/ui/tooltip";
     import * as CopyableText from "$src/lib/components/ui/copyable-text";
     import { Revit, selectElement as selectElementRevit } from "$src/modules/api/revit.svelte.js";
     import { ArchiCAD, selectElement as selectElementArchiCAD } from "$src/modules/api/archicad.svelte.js";
+    import type { AuditReport, AuditReportData } from "$src/types/report";
+    import type { DocumentState, Facet, IdsDocument, Specification } from "$src/types/ids";
 
-    let activeDocument = $derived(IDS.Module.activeDocument ? IDS.Module.documents[IDS.Module.activeDocument] : null);
-    let documentState = $derived(IDS.Module.activeDocument ? IDS.Module.states[IDS.Module.activeDocument] : null);
-    let auditReport = $derived(documentState?.auditReport ? getAuditReportById(documentState.auditReport) : null);
-    let expandedSpecs = $state(new Set());
-    let expandedRequirements = $state(new Set());
+    let activeDocument = $derived(
+        IDS.Module.activeDocument ? (IDS.Module.documents[IDS.Module.activeDocument] as IdsDocument) : null
+    );
+    let documentState = $derived(
+        IDS.Module.activeDocument ? (IDS.Module.states[IDS.Module.activeDocument] as DocumentState) : null
+    );
+    let auditReport = $derived(
+        documentState?.auditReport ? (getAuditReportById(documentState.auditReport) as AuditReport | undefined) : null
+    );
+    let expandedSpecs = $state(new Set<number>());
+    let expandedRequirements = $state(new Set<string>());
     let allExpanded = $state(false);
 
+    type SpecificationStatus = boolean | 'skipped' | null;
+
     // Open Editor mode and jump to a specific specification
-    function editSpecification(index) {
+    function editSpecification(index: number) {
         if (IDS.Module.activeDocument) {
             IDS.setDocumentState(IDS.Module.activeDocument, { 
                 viewMode: 'editor',
@@ -26,13 +36,13 @@
         }
     }
 
-    function toggleSpecification(index) {
+    function toggleSpecification(index: number) {
         if (expandedSpecs.has(index)) {
             expandedSpecs.delete(index);
         } else {
             expandedSpecs.add(index);
         }
-        expandedSpecs = new Set(expandedSpecs);
+        expandedSpecs = new Set<number>(expandedSpecs);
     }
 
     function toggleAllSpecifications() {
@@ -40,7 +50,7 @@
         
         if (allExpanded) {
             // Collapse all
-            expandedSpecs = new Set();
+            expandedSpecs = new Set<number>();
             allExpanded = false;
         } else {
             // Expand all
@@ -50,26 +60,26 @@
         }
     }
 
-    function getSpecificationStatus(specIndex, auditData) {
+    function getSpecificationStatus(specIndex: number, auditData: AuditReportData): SpecificationStatus {
         const spec = auditData.specifications[specIndex];
         if (!spec) return null;
         return spec.is_skipped ? 'skipped' : spec.status;
     }
 
-    function getSpecificationStats(specIndex, auditData) {
+    function getSpecificationStats(specIndex: number, auditData: AuditReportData) {
         const spec = auditData.specifications[specIndex];
         if (!spec) return null;
         return {
-            requirements: `${spec.total_requirements || 0}`,
-            requirementsPassed: `${spec.total_requirements_pass || 0}`,
-            checksTotal: `${spec.total_checks || 0}`,
-            checksPassed: `${spec.total_checks_pass || 0}`,
-            applicableTotal: `${spec.total_applicable || 0}`,
-            applicablePassed: `${spec.total_applicable_pass || 0}`
+            requirements: spec.total_requirements || 0,
+            requirementsPassed: spec.total_requirements_pass || 0,
+            checksTotal: spec.total_checks || 0,
+            checksPassed: spec.total_checks_pass || 0,
+            applicableTotal: spec.total_applicable || 0,
+            applicablePassed: spec.total_applicable_pass || 0
         };
     }
 
-    function getSpecificationReason(specIndex, auditData) {
+    function getSpecificationReason(specIndex: number, auditData: AuditReportData) {
         const spec = auditData.specifications[specIndex];
         if (!spec) return null;
         
@@ -93,6 +103,10 @@
         return null; // No reason needed for passed specifications
     }
 
+    function getDocumentSpecificationUsage(spec: Specification) {
+        return IDS.getSpecUsage(spec);
+    }
+
     async function handleDownloadReport() {
         if (!auditReport) return;
         
@@ -100,58 +114,91 @@
             await downloadAuditReport(auditReport.id);
             success('Audit report downloaded successfully');
         } catch (err) {
-            error(`Failed to download report: ${err.message}`);
+            const message = err instanceof Error ? err.message : String(err);
+            error(`Failed to download report: ${message}`);
         }
     }
 
-    function getRequirementStatus(specIndex, reqIndex, auditData) {
+    function getRequirementStatus(specIndex: number, reqIndex: number, auditData: AuditReportData) {
         const spec = auditData.specifications[specIndex];
         if (!spec || !spec.requirements || !spec.requirements[reqIndex]) return null;
         return spec.requirements[reqIndex];
     }
 
-    function toggleRequirementDetails(specIndex, reqIndex) {
+    type RequirementGroup = {
+        facetType: string;
+        items: { facet: Facet; reqIndex: number }[];
+    };
+
+    function getRequirementGroups(spec: Specification | undefined | null): RequirementGroup[] {
+        if (!spec?.requirements) return [];
+
+        const groups: RequirementGroup[] = [];
+        let reqIndex = 0;
+
+        for (const [facetType, facets] of Object.entries(spec.requirements)) {
+            if (!Array.isArray(facets) || facets.length === 0) continue;
+            groups.push({
+                facetType,
+                items: facets.map((facet) => ({
+                    facet,
+                    reqIndex: reqIndex++
+                }))
+            });
+        }
+
+        return groups;
+    }
+
+    function toggleRequirementDetails(specIndex: number, reqIndex: number) {
         const key = `${specIndex}-${reqIndex}`;
         if (expandedRequirements.has(key)) {
             expandedRequirements.delete(key);
         } else {
             expandedRequirements.add(key);
         }
-        expandedRequirements = new Set(expandedRequirements);
+        expandedRequirements = new Set<string>(expandedRequirements);
     }
 
-    function isRequirementDetailsExpanded(specIndex, reqIndex) {
+    function isRequirementDetailsExpanded(specIndex: number, reqIndex: number) {
         return expandedRequirements.has(`${specIndex}-${reqIndex}`);
     }
-    
-    async function handleSelectElement(globalId) {
+
+    async function handleSelectElement(globalId: string | null | undefined) {
         if (!globalId || globalId === '-') return;
-        
+
         if (ArchiCAD.enabled && ArchiCAD.connected) {
             try {
                 await selectElementArchiCAD(globalId);
             } catch (err) {
-                error(`Failed to select element: ${err.message}`);
+                error(`Failed to select element: ${err instanceof Error ? err.message : String(err)}`);
             }
         } else if (Revit.enabled && Revit.connected) {
             try {
                 await selectElementRevit(globalId);
             } catch (err) {
-                error(`Failed to select element: ${err.message}`);
+                error(`Failed to select element: ${err instanceof Error ? err.message : String(err)}`);
             }
         }
     }
-    
+
     // Helper to check if any BIM tool is connected
     const isBimToolConnected = $derived(
         (ArchiCAD.enabled && ArchiCAD.connected) || (Revit.enabled && Revit.connected)
     );
-    
+
     // Helper to get the active BIM tool name
     const activeBimToolName = $derived(
         ArchiCAD.enabled && ArchiCAD.connected ? 'ArchiCAD' :
         Revit.enabled && Revit.connected ? 'Revit' : null
     );
+
+    const handleActivation = (event: KeyboardEvent, action: () => void) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            action();
+        }
+    };
 </script>
 
 <div class="ids-viewer">
@@ -239,8 +286,17 @@
                 </button>
             </div>
             {#each activeDocument.specifications.specification as spec, index}
+                {@const usage = getDocumentSpecificationUsage(spec)}
+                {@const requirementGroups = getRequirementGroups(spec)}
                 <div class="specification-card {auditReport ? 'with-audit' : ''} {auditReport && getSpecificationStatus(index, auditReport.data) !== null ? (getSpecificationStatus(index, auditReport.data) === 'skipped' ? 'spec-skipped' : (getSpecificationStatus(index, auditReport.data) ? 'spec-pass' : 'spec-fail')) : ''}">
-                    <div class="spec-card-header" onclick={() => toggleSpecification(index)}>
+                    <div
+                        class="spec-card-header"
+                        role="button"
+                        tabindex="0"
+                        aria-expanded={expandedSpecs.has(index)}
+                        onclick={() => toggleSpecification(index)}
+                        onkeydown={(event) => handleActivation(event, () => toggleSpecification(index))}
+                    >
                         <div class="spec-title-section">
                             <div class="spec-title-row">
                                 <h2>{spec["@name"] || `Specification ${index + 1}`}</h2>
@@ -268,27 +324,29 @@
                             {#if "@description" in spec}
                                 <p class="spec-description">{spec["@description"]}</p>
                             {/if}
-                            {#if spec.applicability["@minOccurs"] === 1 && spec.applicability["@maxOccurs"] === 'unbounded'}
-                                <span class="cardinality-badge required">Required</span>
-                            {/if}
-                            {#if spec.applicability["@minOccurs"] === 0 && spec.applicability["@maxOccurs"] === 'unbounded'}
-                                <span class="cardinality-badge optional">Optional</span>
-                            {/if}
-                            {#if spec.applicability["@minOccurs"] === 0 && spec.applicability["@maxOccurs"] === 0}
-                                <span class="cardinality-badge prohibited">Prohibited</span>
-                            {/if}
+                            <div class="spec-stats">
+                                {#if usage === 'required'}
+                                    <span class="stat-item">Required</span>
+                                {/if}
+                                {#if usage === 'optional'}
+                                    <span class="stat-item">Optional</span>
+                                {/if}
+                                {#if usage === 'prohibited'}
+                                    <span class="stat-item">Prohibited</span>
+                                {/if}
+                                {#if auditReport}
+                                    {@const stats = getSpecificationStats(index, auditReport.data)}
+                                    {@const status = getSpecificationStatus(index, auditReport.data)}
+                                    {#if stats && usage !== 'prohibited' && status !== 'skipped'}
+                                        <span class="stat-item">Checks: {stats.checksPassed}/{stats.checksTotal}</span>
+                                        <span class="stat-item">Requirements: {stats.requirementsPassed}/{stats.requirements}</span>
+                                    {/if}
+                                {/if}
+                            </div>
                             {#if auditReport}
                                 {@const reason = getSpecificationReason(index, auditReport.data)}
                                 {#if reason}
                                     <p class="spec-reason">{reason}</p>
-                                {/if}
-                                {@const stats = getSpecificationStats(index, auditReport.data)}
-                                {@const status = getSpecificationStatus(index, auditReport.data)}
-                                {#if stats && status !== 'skipped'}
-                                    <div class="spec-stats">
-                                        <span class="stat-item">Checks: {stats.checksPassed}/{stats.checksTotal}</span>
-                                        <span class="stat-item">Requirements: {stats.requirementsPassed}/{stats.requirements}</span>
-                                    </div>
                                 {/if}
                             {/if}
                         </div>
@@ -329,11 +387,107 @@
                                         {/if}
                                     {/each}
                                 </div>
+
+                                {#if auditReport}
+                                    {@const status = getSpecificationStatus(index, auditReport.data)}
+                                    {#if status === false && usage === 'prohibited'}
+                                        {@const specReport = auditReport.data.specifications[index]}
+                                        {@const applicableEntities = specReport.applicable_entities ?? []}
+                                        <div class="entity-tables">
+                                            {#if applicableEntities.length > 0}
+                                                <div class="entity-table-section fail">
+                                                    <h4>Failed Elements ({applicableEntities.length})</h4>
+                                                    <div class="entity-table-container">
+                                                        <Tooltip.Provider>
+                                                            <table class="entity-table">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Class</th>
+                                                                    <th>PredefinedType</th>
+                                                                    <th>Name</th>
+                                                                    <th>Description</th>
+                                                                    <th>Warning</th>
+                                                                    <th>GlobalId</th>
+                                                                    <th>Tag</th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                {#each applicableEntities.slice(0, 10) as entity}
+                                                                    <tr>
+                                                                        <td>{entity.class}</td>
+                                                                        <td>{entity.predefined_type || '-'}</td>
+                                                                        <td>
+                                                                            <Tooltip.Root>
+                                                                                <Tooltip.Trigger>
+                                                                                    <div class="truncated-text">{entity.name || '-'}</div>
+                                                                                </Tooltip.Trigger>
+                                                                                <Tooltip.Content>
+                                                                                    <p>{entity.name || '-'}</p>
+                                                                                </Tooltip.Content>
+                                                                            </Tooltip.Root>
+                                                                        </td>
+                                                                        <td>
+                                                                            <Tooltip.Root delayDuration={0}>
+                                                                                <Tooltip.Trigger>
+                                                                                    <div class="truncated-text">{entity.description || '-'}</div>
+                                                                                </Tooltip.Trigger>
+                                                                                <Tooltip.Content>
+                                                                                    <p>{entity.description || '-'}</p>
+                                                                                </Tooltip.Content>
+                                                                            </Tooltip.Root>
+                                                                        </td>
+                                                                        <td>
+                                                                            <Tooltip.Root delayDuration={0}>
+                                                                                <Tooltip.Trigger>
+                                                                                    <div class="truncated-text">{entity.reason || '-'}</div>
+                                                                                </Tooltip.Trigger>
+                                                                                <Tooltip.Content>
+                                                                                    <p>{entity.reason || '-'}</p>
+                                                                                </Tooltip.Content>
+                                                                            </Tooltip.Root>
+                                                                        </td>
+                                                                        <td>
+                                                                            <Tooltip.Root>
+                                                                                <Tooltip.Trigger>
+                                                                                    <div class="truncated-text">{entity.global_id || '-'}</div>
+                                                                                </Tooltip.Trigger>
+                                                                                <Tooltip.Content>
+                                                                                    <p>{entity.global_id || '-'}</p>
+                                                                                </Tooltip.Content>
+                                                                            </Tooltip.Root>
+                                                                        </td>
+                                                                        <td>
+                                                                            <Tooltip.Root>
+                                                                                <Tooltip.Trigger>
+                                                                                    <div class="truncated-text">{entity.tag || '-'}</div>
+                                                                                </Tooltip.Trigger>
+                                                                                <Tooltip.Content>
+                                                                                    <p>{entity.tag || '-'}</p>
+                                                                                </Tooltip.Content>
+                                                                            </Tooltip.Root>
+                                                                        </td>
+                                                                    </tr>
+                                                                {/each}
+                                                                {#if applicableEntities.length > 10}
+                                                                    <tr class="more-row">
+                                                                        <td colspan="7">... {applicableEntities.length - 10} more failing elements not shown ...</td>
+                                                                    </tr>
+                                                                {/if}
+                                                            </tbody>
+                                                            </table>
+                                                        </Tooltip.Provider>
+                                                    </div>
+                                                </div>
+                                            {/if}
+                                        </div>
+
+                                    {/if}
+                                {/if}
                             </div>
 
                             {#if auditReport}
                                 {@const status = getSpecificationStatus(index, auditReport.data)}
-                                {#if !status && spec.applicability["@maxOccurs"] == 0}
+                                {#if !status && spec.applicability?.["@maxOccurs"] == 0}
                                     {@const specReport = auditReport.data.specifications[index]}
                                     {#if specReport.applicable_entities && specReport.applicable_entities.length > 0}
                                         <div class="facet-section">
@@ -382,7 +536,7 @@
                                                             {/each}
                                                             {#if specReport.applicable_entities.length > 10}
                                                                 <tr class="more-row">
-                                                                    <td colspan={isBimToolConnected ? "8" : "7"}>... {specReport.applicable_entities.length - 10} more failing elements not shown ...</td>
+                                                                    <td colspan={isBimToolConnected ? 8 : 7}>... {specReport.applicable_entities.length - 10} more failing elements not shown ...</td>
                                                                 </tr>
                                                             {/if}
                                                         </tbody>
@@ -395,36 +549,36 @@
                             {/if}
 
                             <!-- Requirements Section -->
+                            {#if requirementGroups.length > 0}
                             <div class="facet-section">
                                 <h3>Requirements</h3>
                                 
                                 <div class="facets-list">
-                                    {#each Object.entries(spec.requirements || {}) as [facetType, facets]}
-                                        {#if Array.isArray(facets) && facets.length > 0}
-                                            <div class="facet-group">
-                                                {#each facets as facet, facetIndex}
-                                                    {@const reqAuditData = auditReport ? getRequirementStatus(index, facetIndex, auditReport.data) : null}
-                                                    {@const specStatus = auditReport ? getSpecificationStatus(index, auditReport.data) : null}
-                                                    <div class="facet-item {auditReport && reqAuditData && specStatus !== 'skipped' ? (reqAuditData.status ? 'audit-pass' : 'audit-fail') : ''}">
-                                                        <button class="facet-header" onclick={() => {if (auditReport && reqAuditData && specStatus !== 'skipped') toggleRequirementDetails(index, facetIndex)}}>
-                                                            <span class="facet-bullet">•</span>
-                                                            <span class="facet-text">{@html IDS.stringifyFacet("requirements", facet, facetType, spec)}</span>
-                                                            {#if auditReport && reqAuditData && specStatus !== 'skipped'}
-                                                                {#if reqAuditData.total_applicable > 0}
-                                                                    <div class="audit-details-toggle">
-                                                                        {reqAuditData.status ? 'PASS' : 'FAIL'} ({reqAuditData.total_pass}/{reqAuditData.total_applicable})
-                                                                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:rotated={isRequirementDetailsExpanded(index, facetIndex)}>
-                                                                            <polyline points="6,9 12,15 18,9"></polyline>
-                                                                        </svg>
-                                                                    </div>
-                                                                {:else}
-                                                                    <span class="audit-status-badge">
-                                                                        {reqAuditData.status ? 'PASS' : 'FAIL'}
-                                                                    </span>
-                                                                {/if}
+                                    {#each requirementGroups as group}
+                                        <div class="facet-group">
+                                            {#each group.items as item}
+                                                {@const reqAuditData = auditReport ? getRequirementStatus(index, item.reqIndex, auditReport.data) : null}
+                                                {@const specStatus = auditReport ? getSpecificationStatus(index, auditReport.data) : null}
+                                                <div class="facet-item {auditReport && reqAuditData && specStatus !== 'skipped' ? (reqAuditData.status ? 'audit-pass' : 'audit-fail') : ''}">
+                                                    <button class="facet-header" onclick={() => {if (auditReport && reqAuditData && specStatus !== 'skipped') toggleRequirementDetails(index, item.reqIndex)}}>
+                                                        <span class="facet-bullet">•</span>
+                                                        <span class="facet-text">{@html IDS.stringifyFacet("requirements", item.facet, group.facetType, spec)}</span>
+                                                        {#if auditReport && reqAuditData && specStatus !== 'skipped'}
+                                                            {#if reqAuditData.total_applicable > 0}
+                                                                <div class="audit-details-toggle">
+                                                                    {reqAuditData.status ? 'PASS' : 'FAIL'} ({reqAuditData.total_pass}/{reqAuditData.total_applicable})
+                                                                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class:rotated={isRequirementDetailsExpanded(index, item.reqIndex)}>
+                                                                        <polyline points="6,9 12,15 18,9"></polyline>
+                                                                    </svg>
+                                                                </div>
+                                                            {:else}
+                                                                <span class="audit-status-badge">
+                                                                    {reqAuditData.status ? 'PASS' : 'FAIL'}
+                                                                </span>
                                                             {/if}
-                                                        </button>
-                                                        {#if isRequirementDetailsExpanded(index, facetIndex)}
+                                                        {/if}
+                                                    </button>
+                                                    {#if reqAuditData && isRequirementDetailsExpanded(index, item.reqIndex)}
                                                             <div class="facet-expansion">
                                                                 <div class="entity-tables">
                                                                     {#if reqAuditData.passed_entities && reqAuditData.passed_entities.length > 0}
@@ -472,7 +626,7 @@
                                                                                         {/each}
                                                                                         {#if reqAuditData.passed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={isBimToolConnected ? "7" : "6"}>... {reqAuditData.passed_entities.length - 10} more passing elements not shown ...</td>
+                                                                                                <td colspan={isBimToolConnected ? 7 : 6}>... {reqAuditData.passed_entities.length - 10} more passing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>
@@ -529,7 +683,7 @@
                                                                                         {/each}
                                                                                         {#if reqAuditData.failed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={isBimToolConnected ? "8" : "7"}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
+                                                                                                <td colspan={isBimToolConnected ? 8 : 7}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>
@@ -540,14 +694,14 @@
                                                                     {/if}
                                                                 </div>
                                                             </div>
-                                                        {/if}
-                                                    </div>
-                                                {/each}
-                                            </div>
-                                        {/if}
+                                                    {/if}
+                                                </div>
+                                            {/each}
+                                        </div>
                                     {/each}
                                 </div>
                             </div>
+                            {/if}
                         </div>
                     {/if}
                 </div>
@@ -892,31 +1046,9 @@
         border-radius: 6px;
     }
 
-    .cardinality-badge {
-        display: inline-block;
-        margin: 8px 8px 0 0;
-        padding: 4px 8px;
-        border-radius: 12px;
-        font-size: 11px;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
 
-    .cardinality-badge.required {
-        background: #10b98122;
-        color: #10b981;
-    }
 
-    .cardinality-badge.optional {
-        background: #8b8d8f22;
-        color: #8b8d8f;
-    }
 
-    .cardinality-badge.prohibited {
-        background: #ef444422;
-        color: #ef4444;
-    }
 
     .spec-actions {
         display: flex;

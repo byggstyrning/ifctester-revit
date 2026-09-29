@@ -22,12 +22,21 @@ if (-not (Test-Path $BinDir)) {
     New-Item -ItemType Directory -Path $BinDir -Force | Out-Null
 }
 
-# Get latest ifctester version from PyPI
-Write-Host "Checking latest ifctester version..." -ForegroundColor Gray
+# Resolve the pinned ifctester version from PyPI
+Write-Host "Resolving ifctester version..." -ForegroundColor Gray
 try {
-    $pypiResponse = Invoke-RestMethod -Uri "https://pypi.org/pypi/ifctester/json" -ErrorAction Stop
-    # Filter out dev versions and sort properly
-    $validVersions = $pypiResponse.releases.PSObject.Properties | Where-Object { $_.Name -notlike "*dev*" -and $_.Name -notlike "*a*" -and $_.Name -notlike "*b*" -and $_.Name -notlike "*rc*" } | Sort-Object { try { [version]$_.Name } catch { [version]"0.0.0" } } -Descending
+    $latestVersion = "0.9.0"  # pinned: must match config.json wasm.ifctester_url
+    $files = (Invoke-RestMethod -Uri "https://pypi.org/pypi/ifctester/$latestVersion/json" -ErrorAction Stop).urls
+    $wheel = $files | Where-Object { $_.filename -like "*.whl" } | Select-Object -First 1
+    
+    if (-not $wheel) {
+        throw "No wheel file found for ifctester $latestVersion"
+    }
+    
+    $ifctesterUrl = $wheel.url
+    $ifctesterFileName = $wheel.filename
+    Write-Host "  Found ifctester version $latestVersion" -ForegroundColor Green
+} catch { [version]"0.0.0" } } -Descending
     $latestVersion = ($validVersions | Select-Object -First 1).Name
     $files = $pypiResponse.releases.$latestVersion
     $wheel = $files | Where-Object { $_.filename -like "*.whl" } | Select-Object -First 1
@@ -41,8 +50,8 @@ try {
     Write-Host "  Found ifctester version $latestVersion" -ForegroundColor Green
 } catch {
     Write-Host "  WARNING: Could not fetch version info, using fallback" -ForegroundColor Yellow
-    $ifctesterUrl = "https://files.pythonhosted.org/packages/8c/98/98afa5fa347361b8d0f421b1c5059ef960a455f89b8235e6ceed33c0e796/ifctester-0.8.3-py3-none-any.whl"
-    $ifctesterFileName = "ifctester-0.8.3-py3-none-any.whl"
+    $ifctesterUrl = "https://files.pythonhosted.org/packages/e2/2e/c731c6a784c28b6f28a03c02d3796667c8617128febac83c6df7266fd742/ifctester-0.9.0-py3-none-any.whl"
+    $ifctesterFileName = "ifctester-0.9.0-py3-none-any.whl"
 }
 
 # odfpy - PyPI does not publish wheels, use the custom wheel from IfcOpenShell repo
@@ -59,11 +68,11 @@ $packages = @(
     },
     @{
         Name = "ifcopenshell"
-        # Official source: IfcOpenShell/wasm-wheels repo (Pyodide-compatible wheels)
+        # Pyodide 0.28 build published by the IfcOpenShell project (same wheel the official IfcTester webapp uses)
         Urls = @(
-            "https://raw.githubusercontent.com/IfcOpenShell/wasm-wheels/main/ifcopenshell-0.8.3%2B34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
+            "https://s3.amazonaws.com/ifcopenshell-builds/ifcopenshell-0.8.5%2Ba51b2c5-cp313-cp313-pyodide_2025_0_wasm32.whl"
         )
-        FileName = "ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
+        FileName = "ifcopenshell-0.8.5+a51b2c5-cp313-cp313-pyodide_2025_0_wasm32.whl"
         Optional = $false
     },
     @{

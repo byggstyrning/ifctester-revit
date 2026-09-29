@@ -1,19 +1,23 @@
-<script>
+<script lang="ts">
     import * as Tooltip from "$lib/components/ui/tooltip";
-    import { IFCModels, loadIfc, unloadIfc, auditIfc, openIfc, createAuditReport, clearIdsAuditReports, runAudit, clearAllModels } from "$src/modules/api/api.svelte.js";
-    import * as IDS from "$src/modules/api/ids.svelte.js";
-    import { error, success, idsValidationError } from "$src/modules/utils/toast.svelte.js";
+    import { IFCModels, loadIfc, unloadIfc, openIfc, runAudit, clearAllModels } from "$src/modules/api/api.svelte";
+    import * as IDS from "$src/modules/api/ids.svelte";
+    import { error, success, idsValidationError } from "$src/modules/utils/toast.svelte";
     import { ChevronRightIcon, LinkIcon, XIcon } from "@lucide/svelte";
-    import { Bonsai, connect, disconnect, runAudit as runBonsaiAudit } from "$src/modules/api/bonsai.svelte.js";
+    import { Bonsai, connect, disconnect, runAudit as runBonsaiAudit } from "$src/modules/api/bonsai.svelte";
     import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportIfc } from "$src/modules/api/revit.svelte.js";
     import { ArchiCAD, connect as connectArchiCAD, disconnect as disconnectArchiCAD, runAudit as runArchiCADAudit, getIfcConfigurations as getArchiCADIfcConfigurations, exportIfc as exportArchiCADIfc } from "$src/modules/api/archicad.svelte.js";
     import { onMount } from 'svelte';
+    import type { AuditReport } from "$src/types/report";
     
+    const errorMessage = (err: unknown) => (err instanceof Error ? err.message : String(err));
+
     let isAuditing = $state(false);
-    let activeTab = $state('home');
+    let activeTab = $state<"home" | "bonsai" | "revit" | "archicad">('home');
+    // biome-ignore lint/style/useConst: Svelte state uses assignment for updates.
     let isMinimized = $state(false);
     let revitDragOver = $state(false);
-    let ifcConfigurations = $state([]);
+    let ifcConfigurations = $state<{ name: string }[]>([]);
     let selectedIfcConfig = $state('');
     let isExportingIfc = $state(false);
     let isLoadingConfigs = $state(false);
@@ -23,50 +27,51 @@
             await openIfc();
             success('IFC model loaded successfully');
         } catch (err) {
-            error(`Failed to load IFC model: ${err.message}`);
+            const message = err instanceof Error ? err.message : String(err);
+            error(`Failed to load IFC model: ${message}`);
         }
     };
     
-    const handleRevitDragOver = (e) => {
+    const handleRevitDragOver = (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         revitDragOver = true;
     };
-    
-    const handleRevitDragLeave = (e) => {
+
+    const handleRevitDragLeave = (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         revitDragOver = false;
     };
-    
-    const handleRevitDrop = async (e) => {
+
+    const handleRevitDrop = async (e: DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
         revitDragOver = false;
-        
-        const files = Array.from(e.dataTransfer.files);
+
+        const files = Array.from(e.dataTransfer?.files ?? []);
         const ifcFile = files.find(f => f.name.toLowerCase().endsWith('.ifc'));
-        
+
         if (!ifcFile) {
             error('Please drop an IFC file (.ifc)');
             return;
         }
-        
+
         try {
             await loadIfc(ifcFile);
             success('IFC model loaded from Revit');
         } catch (err) {
-            error(`Failed to load IFC model: ${err.message}`);
+            error(`Failed to load IFC model: ${errorMessage(err)}`);
         }
     };
-    
+
     const loadIfcConfigurations = async () => {
         if (!Revit.connected) return;
-        
+
         try {
             isLoadingConfigs = true;
             const configs = await getIfcConfigurations();
-            ifcConfigurations = configs;
+            ifcConfigurations = configs as unknown as { name: string }[];
             // Don't auto-select - let user choose
         } catch (err) {
             console.error('Failed to load IFC configurations:', err);
@@ -77,7 +82,7 @@
 
     const loadArchiCADIfcConfigurations = async () => {
         if (!ArchiCAD.connected) return;
-        
+
         try {
             isLoadingConfigs = true;
             const configs = await getArchiCADIfcConfigurations();
@@ -91,26 +96,26 @@
             isLoadingConfigs = false;
         }
     };
-    
+
     const handleExportIfc = async () => {
         if (!selectedIfcConfig) {
             error('Please select an IFC export configuration');
             return;
         }
-        
+
         try {
             isExportingIfc = true;
-            
+
             // Clear all existing models before loading the new export
             await clearAllModels();
-            
+
             const exportedFile = await exportIfc(selectedIfcConfig);
-            
+
             if (exportedFile) {
                 // Automatically load the exported IFC file
                 await loadIfc(exportedFile);
                 success('IFC exported and loaded successfully');
-                
+
                 // Automatically run audit if IDS document is active
                 if (IDS.Module.activeDocument) {
                     try {
@@ -119,8 +124,8 @@
                     } catch (auditErr) {
                         console.error("Auto-audit failed: ", auditErr);
                         // Check if it's an IDS validation error - show it even for auto-audit
-                        const errorMessage = auditErr?.message || auditErr?.toString() || String(auditErr);
-                        if (errorMessage.includes('XMLSchema') || errorMessage.includes('xmlschema') || errorMessage.includes('IDS')) {
+                        const message = errorMessage(auditErr);
+                        if (message.includes('XMLSchema') || message.includes('xmlschema') || message.includes('IDS')) {
                             idsValidationError(auditErr);
                         }
                         // Otherwise, don't show error toast for auto-audit failure, just log it
@@ -128,7 +133,7 @@
                 }
             }
         } catch (err) {
-            error(`Failed to export IFC: ${err.message}`);
+            error(`Failed to export IFC: ${errorMessage(err)}`);
         } finally {
             isExportingIfc = false;
         }
@@ -139,20 +144,20 @@
             error('Please select an IFC export configuration');
             return;
         }
-        
+
         try {
             isExportingIfc = true;
-            
+
             // Clear all existing models before loading the new export
             await clearAllModels();
-            
+
             const exportedFile = await exportArchiCADIfc(selectedIfcConfig);
-            
+
             if (exportedFile) {
                 // Automatically load the exported IFC file
                 await loadIfc(exportedFile);
                 success('IFC exported and loaded successfully');
-                
+
                 // Automatically run audit if IDS document is active
                 if (IDS.Module.activeDocument) {
                     try {
@@ -164,17 +169,18 @@
                 }
             }
         } catch (err) {
-            error(`Failed to export IFC: ${err.message}`);
+            error(`Failed to export IFC: ${errorMessage(err)}`);
         } finally {
             isExportingIfc = false;
         }
     };
-    
-    const handleUnloadModel = async (modelId) => {
+
+    const handleUnloadModel = async (modelId: string) => {
         try {
             await unloadIfc(modelId);
         } catch (err) {
-            error(`Failed to unload model: ${err.message}`);
+            const message = err instanceof Error ? err.message : String(err);
+            error(`Failed to unload model: ${message}`);
         }
     };
     
@@ -185,9 +191,8 @@
             success('Audit completed successfully');
         } catch (err) {
             console.error("Audit failed: ", err);
-            // Check if it's an IDS validation error
-            const errorMessage = err?.message || err?.toString() || String(err);
-            if (errorMessage.includes('XMLSchema') || errorMessage.includes('xmlschema') || errorMessage.includes('IDS')) {
+            const message = errorMessage(err);
+            if (message.includes('XMLSchema') || message.includes('xmlschema') || message.includes('IDS')) {
                 idsValidationError(err);
             } else {
                 error(`Audit failed: check console for details`);
@@ -197,8 +202,8 @@
         }
     };
     
-    const handleViewAuditReport = (auditId) => {
-        const auditReport = IFCModels.audits.find(audit => audit.id === auditId);
+    const handleViewAuditReport = (auditId: string) => {
+        const auditReport = IFCModels.audits.find(audit => audit.id === auditId) as AuditReport | undefined;
         if (!auditReport) return;
         
         // Switch to the IDS document that was used for this audit
@@ -214,7 +219,7 @@
         }
     };
     
-    const formatFileSize = (bytes) => {
+    const formatFileSize = (bytes: number) => {
         const units = ['B', 'KB', 'MB', 'GB'];
         let size = bytes;
         let unitIndex = 0;
@@ -257,8 +262,8 @@
         } catch (err) {
             console.error("Audit failed: ", err);
             // Check if it's an IDS validation error
-            const errorMessage = err?.message || err?.toString() || String(err);
-            if (errorMessage.includes('XMLSchema') || errorMessage.includes('xmlschema') || errorMessage.includes('IDS')) {
+            const message = errorMessage(err);
+            if (message.includes('XMLSchema') || message.includes('xmlschema') || message.includes('IDS')) {
                 idsValidationError(err);
             } else {
                 error(`Audit failed: check console for details`);
@@ -272,7 +277,7 @@
         // Prefer explicit launch source from host integrations when available.
         const urlParams = new URLSearchParams(window.location.search);
         const source = (urlParams.get('source') || '').toLowerCase();
-        const isArchiCADHost = typeof window !== 'undefined' && !!window.ACAPI;
+        const isArchiCADHost = typeof window !== 'undefined' && !!(window as Window & { ACAPI?: unknown }).ACAPI;
 
         if (source === 'bonsai' && Bonsai.enabled) {
             activeTab = 'bonsai';
@@ -309,7 +314,7 @@
     <div class="buttons">
         <Tooltip.Provider>
             {#if isMinimized}
-                <Tooltip.Root disableHoverableContent="true">
+                <Tooltip.Root disableHoverableContent>
                     <Tooltip.Trigger>
                         <button class="tb-btn expand-btn" onclick={() => isMinimized = false} aria-label="Expand Toolbar">
                             <ChevronRightIcon size={24} />
@@ -320,7 +325,7 @@
                     </Tooltip.Content>
                 </Tooltip.Root>
             {/if}
-            <Tooltip.Root disableHoverableContent="true">
+            <Tooltip.Root disableHoverableContent>
                 <Tooltip.Trigger>
                     <button class="tb-btn {activeTab === 'home' ? 'active' : ''}" onclick={() => activeTab = 'home'} aria-label="Home">
                         <svg class="w-6 h-6" aria-hidden="true" xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="none" viewBox="0 0 24 24">
@@ -332,7 +337,7 @@
                     <p>Home</p>
                 </Tooltip.Content>
             </Tooltip.Root>
-            <Tooltip.Root disableHoverableContent="true">
+            <Tooltip.Root disableHoverableContent>
                 <Tooltip.Trigger>
                     <button class="tb-btn {activeTab === 'bonsai' ? 'active' : ''}" onclick={() => activeTab = 'bonsai'} aria-label="Bonsai Integration">
                         <svg style="height: 20px;" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="32mm" height="32mm" version="1.1" viewBox="0 0 32 32" xml:space="preserve">
@@ -345,7 +350,7 @@
                     <p>Bonsai Integration</p>
                 </Tooltip.Content>
             </Tooltip.Root>
-            <Tooltip.Root disableHoverableContent="true">
+            <Tooltip.Root disableHoverableContent={true}>
                 <Tooltip.Trigger>
                     <button class="tb-btn {activeTab === 'revit' ? 'active' : ''}" onclick={() => activeTab = 'revit'} aria-label="Revit Integration">
                         <img src="/images/revit-icon.svg" alt="Revit" width="24" height="24" />
@@ -355,7 +360,7 @@
                     <p>Revit Integration</p>
                 </Tooltip.Content>
             </Tooltip.Root>
-            <Tooltip.Root disableHoverableContent="true">
+            <Tooltip.Root disableHoverableContent={true}>
                 <Tooltip.Trigger>
                     <button class="tb-btn {activeTab === 'archicad' ? 'active' : ''}" onclick={() => activeTab = 'archicad'} aria-label="ArchiCAD Integration">
                         <img src="/images/archicad-icon.svg" alt="ArchiCAD" width="24" height="24" />

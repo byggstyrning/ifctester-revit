@@ -1,55 +1,59 @@
-<script>
-    import * as IDS from "$src/modules/api/ids.svelte.js";
+<script lang="ts">
+    import * as IDS from "$src/modules/api/ids.svelte";
+    import type { DocumentState, IdsCardinality, IdsDocument, Specification } from "$src/types/ids";
     
-    let activeDocument = $derived(IDS.Module.activeDocument ? IDS.Module.documents[IDS.Module.activeDocument] : null);
-    let documentState = $derived(IDS.Module.activeDocument ? IDS.Module.states[IDS.Module.activeDocument] : null);
-    let activeSpecification = $derived(activeDocument && documentState?.activeSpecification !== null && activeDocument.specifications?.specification ? 
-        activeDocument.specifications.specification[documentState.activeSpecification] : null);
+    let activeDocument = $derived(
+        IDS.Module.activeDocument ? (IDS.Module.documents[IDS.Module.activeDocument] as IdsDocument) : null
+    );
+    let documentState = $derived(
+        IDS.Module.activeDocument ? (IDS.Module.states[IDS.Module.activeDocument] as DocumentState) : null
+    );
+    let activeSpecification = $derived(
+        activeDocument && documentState && documentState.activeSpecification !== null && activeDocument.specifications?.specification
+            ? (activeDocument.specifications.specification[documentState.activeSpecification] as Specification)
+            : null
+    );
 
-    const getProp = (prop) => {
-        return activeSpecification?.[prop] ?? "";
+    const getProp = (prop: string) => {
+        const value = (activeSpecification as Record<string, unknown>)?.[prop];
+        return typeof value === "string" ? value : "";
     };
     
-    const setProp = (prop, value) => {
-        if (!activeSpecification || !IDS.Module.activeDocument || documentState?.activeSpecification === null) return;
-        // Mutate directly on the state object to ensure reactivity
-        const doc = IDS.Module.documents[IDS.Module.activeDocument];
-        if (doc && doc.specifications?.specification) {
-            const spec = doc.specifications.specification[documentState.activeSpecification];
-            if (spec) {
-                spec[prop] = value;
-            }
-        }
+    // Mutate directly on the state object to ensure reactivity
+    const getActiveSpec = (): Specification | null => {
+        if (!IDS.Module.activeDocument || !documentState || documentState.activeSpecification === null) return null;
+        const doc = IDS.Module.documents[IDS.Module.activeDocument] as IdsDocument | undefined;
+        if (!doc?.specifications?.specification) return null;
+        return doc.specifications.specification[documentState.activeSpecification] ?? null;
     };
 
-    const addIfcVersion = (e, version) => {
-        if (!IDS.Module.activeDocument || documentState?.activeSpecification === null) return;
-        const doc = IDS.Module.documents[IDS.Module.activeDocument];
-        if (!doc || !doc.specifications?.specification) return;
-        
-        const spec = doc.specifications.specification[documentState.activeSpecification];
+    const setProp = (prop: string, value: string) => {
+        const spec = getActiveSpec();
         if (!spec) return;
-        
+        (spec as Record<string, unknown>)[prop] = value;
+    };
+
+    const addIfcVersion = (e: Event, version: string) => {
+        const spec = getActiveSpec();
+        if (!spec) return;
+
         if (!("@ifcVersion" in spec)) spec["@ifcVersion"] = [];
-        if (e.target.checked) {
-            if (!spec["@ifcVersion"].includes(version)) {
-                spec["@ifcVersion"] = [...spec["@ifcVersion"], version];
+        const target = e.target as HTMLInputElement | null;
+        if (target?.checked) {
+            if (!spec["@ifcVersion"]?.includes(version)) {
+                spec["@ifcVersion"] = [...(spec["@ifcVersion"] ?? []), version];
             }
         } else {
-            spec["@ifcVersion"] = spec["@ifcVersion"].filter(v => v !== version);
+            spec["@ifcVersion"] = (spec["@ifcVersion"] ?? []).filter(v => v !== version);
         }
     };
 
-    const setUsage = (usage) => {
-        if (!IDS.Module.activeDocument || documentState?.activeSpecification === null) return;
-        const doc = IDS.Module.documents[IDS.Module.activeDocument];
-        if (!doc || !doc.specifications?.specification) return;
-        
-        const spec = doc.specifications.specification[documentState.activeSpecification];
+    const setUsage = (usage: IdsCardinality) => {
+        const spec = getActiveSpec();
         if (!spec) return;
-        
+
         if (!spec.applicability) spec.applicability = {};
-        
+
         switch (usage) {
             case 'required':
                 spec.applicability["@minOccurs"] = 1;
@@ -79,14 +83,19 @@
         </div>
         <div class="form-group">
             <label for="spec-cardinality">Usage</label>
-            <select class="form-input" id="spec-cardinality" value={IDS.getSpecUsage(activeSpecification)} onchange={(e) => setUsage(e.target.value)}>
+            <select
+                class="form-input"
+                id="spec-cardinality"
+                value={IDS.getSpecUsage(activeSpecification)}
+                onchange={(e) => setUsage((e.target as HTMLSelectElement).value as IdsCardinality)}
+            >
                 <option value="required">Required</option>
                 <option value="optional">Optional</option>
                 <option value="prohibited">Prohibited</option>
             </select>
         </div>
         <div class="form-group full-width">
-            <label>IFC Version</label>
+            <span class="form-label">IFC Version</span>
             <div class="radio-group">
                 <label class="radio-label">
                     <input type="checkbox" value="IFC2X3" checked={activeSpecification?.["@ifcVersion"]?.includes('IFC2X3')} onchange={(e) => addIfcVersion(e, 'IFC2X3')}>

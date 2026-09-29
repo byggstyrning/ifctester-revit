@@ -19,17 +19,15 @@ mkdir -p "$BIN_DIR"
 echo "Output directory: $BIN_DIR"
 echo ""
 
-# Download ifctester from PyPI
-echo "Checking latest ifctester version..."
-IFCTESTER_JSON=$(curl -s "https://pypi.org/pypi/ifctester/json")
-IFCTESTER_VERSION=$(echo "$IFCTESTER_JSON" | python3 -c "import sys, json; releases = [k for k in json.load(sys.stdin)['releases'].keys() if 'dev' not in k and 'a' not in k and 'b' not in k and 'rc' not in k]; print(sorted(releases, key=lambda x: [int(p) for p in x.split('.')])[-1])" 2>/dev/null || echo "0.8.3")
-IFCTESTER_URL=$(echo "$IFCTESTER_JSON" | python3 -c "import sys, json; files = json.load(sys.stdin)['releases']['$IFCTESTER_VERSION']; wheel = next((f for f in files if f['filename'].endswith('.whl')), None); print(wheel['url'] if wheel else '')" 2>/dev/null)
-IFCTESTER_FILENAME=$(basename "$IFCTESTER_URL" 2>/dev/null || echo "ifctester-$IFCTESTER_VERSION-py3-none-any.whl")
+# Download ifctester from PyPI (pinned: must match config.json wasm.ifctester_url)
+IFCTESTER_VERSION="0.9.0"
+IFCTESTER_FILENAME="ifctester-$IFCTESTER_VERSION-py3-none-any.whl"
+echo "Resolving ifctester $IFCTESTER_VERSION..."
+IFCTESTER_URL=$(curl -s "https://pypi.org/pypi/ifctester/$IFCTESTER_VERSION/json" | python3 -c "import sys, json; files = json.load(sys.stdin)['urls']; wheel = next((f for f in files if f['filename'].endswith('.whl')), None); print(wheel['url'] if wheel else '')" 2>/dev/null)
 
 if [ -z "$IFCTESTER_URL" ]; then
     echo "  WARNING: Could not fetch version info, using fallback"
-    IFCTESTER_URL="https://files.pythonhosted.org/packages/8c/98/98afa5fa347361b8d0f421b1c5059ef960a455f89b8235e6ceed33c0e796/ifctester-0.8.3-py3-none-any.whl"
-    IFCTESTER_FILENAME="ifctester-0.8.3-py3-none-any.whl"
+    IFCTESTER_URL="https://files.pythonhosted.org/packages/e2/2e/c731c6a784c28b6f28a03c02d3796667c8617128febac83c6df7266fd742/ifctester-0.9.0-py3-none-any.whl"
 else
     echo "  Found ifctester version $IFCTESTER_VERSION"
 fi
@@ -59,11 +57,10 @@ else
 fi
 
 # Download ifcopenshell (WASM wheel)
-# Using IfcOpenShell/wasm-wheels repo - the official source for Pyodide-compatible wheels
-IFCOPENSHELL_FILENAME="ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
+# Pyodide 0.28 build published by the IfcOpenShell project (same wheel the official IfcTester webapp uses)
+IFCOPENSHELL_FILENAME="ifcopenshell-0.8.5+a51b2c5-cp313-cp313-pyodide_2025_0_wasm32.whl"
 IFCOPENSHELL_URLS=(
-    "https://raw.githubusercontent.com/IfcOpenShell/wasm-wheels/main/ifcopenshell-0.8.3%2B34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
-    "https://github.com/IfcOpenShell/IfcOpenShell/releases/download/v0.8.3/ifcopenshell-0.8.3-cp313-cp313-emscripten_wasm32.whl"
+    "https://s3.amazonaws.com/ifcopenshell-builds/ifcopenshell-0.8.5%2Ba51b2c5-cp313-cp313-pyodide_2025_0_wasm32.whl"
 )
 
 if [ -f "$BIN_DIR/$IFCOPENSHELL_FILENAME" ]; then

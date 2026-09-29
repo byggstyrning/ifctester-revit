@@ -4,14 +4,15 @@
 
 import { MessageType } from '../index';
 import config from '../../../config.json';
-import * as IDS from './ids.js';
+import * as IDS from './ids';
 import * as API from './api';
+import type { ApiCallPayload, WorkerRequest } from "$src/types/wasm";
 
-let pyodide = null;
+let pyodide: any = null;
 let ready = false;
 
-async function installFromCandidateUrls(micropip, urls, packageName) {
-    let lastError = null;
+async function installFromCandidateUrls(micropip: any, urls: string[], packageName: string) {
+    let lastError: unknown = null;
 
     for (const url of urls) {
         try {
@@ -19,7 +20,7 @@ async function installFromCandidateUrls(micropip, urls, packageName) {
             await micropip.install(url);
             console.log(`[worker] ${packageName} installed successfully from: ${url}`);
             return;
-        } catch (error) {
+        } catch (error: any) {
             lastError = error;
             console.warn(`[worker] Failed to install ${packageName} from ${url}: ${error.message}`);
         }
@@ -28,7 +29,7 @@ async function installFromCandidateUrls(micropip, urls, packageName) {
     throw lastError ?? new Error(`No candidate URLs available for ${packageName}`);
 }
 
-self.addEventListener('message', async (event) => {
+self.addEventListener('message', async (event: MessageEvent<WorkerRequest>) => {
     console.log("[worker] Received message:", event.data);
     const { type, payload, id } = event.data;
 
@@ -43,27 +44,33 @@ self.addEventListener('message', async (event) => {
                 });
                 break;
 
-            case MessageType.API_CALL:
+            case MessageType.API_CALL: {
                 if (!ready) {
                     throw new Error('[worker] Pyodide not initialized');
                 }
-                const result = await handleApiCall(payload);
+                if (!payload) {
+                    throw new Error('[worker] Missing payload for API call');
+                }
+                const result = await handleApiCall(payload as ApiCallPayload);
                 self.postMessage({
                     type: MessageType.API_RESPONSE,
                     payload: result,
                     id
                 });
                 break;
+            }
 
             default:
                 throw new Error(`[worker] Unknown message type: ${type}`);
         }
-    } catch (error) {
+    } catch (error: any) {
+        const message = error instanceof Error ? error.message : String(error);
+        const stack = error instanceof Error ? error.stack : undefined;
         self.postMessage({
             type: MessageType.ERROR,
             payload: {
-                message: error.message,
-                stack: error.stack
+                message,
+                stack
             },
             id
         });
@@ -77,13 +84,13 @@ async function initEnvironment() {
     const origin = self.location.origin;
     
     // Helper function to resolve URLs - use absolute URLs for wheel files
-    const resolveUrl = (path) => {
+    const resolveUrl = (path: string) => {
         // If path is already absolute (starts with http:// or https://), use as-is
         if (path.startsWith('http://') || path.startsWith('https://')) {
             return path;
         }
         // Otherwise, make it absolute using the current origin
-        return `${origin}${path.startsWith('/') ? path : '/' + path}`;
+        return `${origin}${path.startsWith('/') ? path : `/${path}`}`;
     };
 
     // Load Pyodide
@@ -103,19 +110,19 @@ async function initEnvironment() {
     try {
         const wheelCandidates = [
             config.wasm.wheel_url,
-            "/worker/bin/ifcopenshell-0.8.3+34a1bc6-cp313-cp313-emscripten_4_0_9_wasm32.whl"
+            "/worker/bin/ifcopenshell-0.8.5+a51b2c5-cp313-cp313-pyodide_2025_0_wasm32.whl"
         ];
         const ifcopenshellUrls = [...new Set(wheelCandidates.map(resolveUrl))];
         await installFromCandidateUrls(micropip, ifcopenshellUrls, "IfcOpenShell");
-    } catch (error) {
+    } catch (error: any) {
         console.error(`[worker] Failed to install IfcOpenShell from local file: ${error.message}`);
-        console.error(`[worker] Error details:`, error);
+        console.error("[worker] Error details:", error);
         // Try to install from PyPI as fallback (may not work for emscripten builds)
         try {
             console.log("[worker] Attempting to install ifcopenshell from PyPI...");
             await micropip.install('ifcopenshell');
             console.log("[worker] IfcOpenShell installed from PyPI");
-        } catch (pypiError) {
+        } catch (pypiError: any) {
             console.error(`[worker] Failed to install IfcOpenShell from PyPI: ${pypiError.message}`);
             throw new Error(`Failed to install IfcOpenShell. Please ensure the wheel file is available at ${config.wasm.wheel_url} or internet access is available. Error: ${error.message}`);
         }
@@ -127,20 +134,22 @@ async function initEnvironment() {
         console.log(`[worker] Installing odfpy from: ${odfpyUrl}`);
         await micropip.install(odfpyUrl);
         console.log("[worker] odfpy installed successfully");
-    } catch (error) {
+    } catch (error: any) {
         console.error(`[worker] Failed to install odfpy from local file: ${error.message}`);
         // Try to install from PyPI as fallback
         try {
             console.log("[worker] Attempting to install odfpy from PyPI...");
             await micropip.install('odfpy');
             console.log("[worker] odfpy installed from PyPI");
-        } catch (pypiError) {
+        } catch (pypiError: any) {
             console.error(`[worker] Failed to install odfpy from PyPI: ${pypiError.message}`);
             throw new Error(`Failed to install odfpy. Please ensure the wheel file is available at ${config.wasm.odfpy_url} or internet access is available.`);
         }
     }
     
     await pyodide.loadPackage("shapely");
+    // ifctester >= 0.9 imports sqlite3 (reporter.py); Pyodide ships it as an unvendored package
+    await pyodide.loadPackage("sqlite3");
 
     // Install IfcTester - try local first, fallback to PyPI
     try {
@@ -156,15 +165,15 @@ async function initEnvironment() {
             await micropip.install('ifctester');
             console.log("[worker] Installed ifctester from PyPI");
         }
-    } catch (error) {
+    } catch (error: any) {
         console.error("[worker] Failed to install ifctester:", error.message);
         // Try alternative: install from PyPI with explicit URL (latest version)
         try {
-            const pypiUrl = 'https://files.pythonhosted.org/packages/8c/98/98afa5fa347361b8d0f421b1c5059ef960a455f89b8235e6ceed33c0e796/ifctester-0.8.3-py3-none-any.whl';
+            const pypiUrl = 'https://files.pythonhosted.org/packages/e2/2e/c731c6a784c28b6f28a03c02d3796667c8617128febac83c6df7266fd742/ifctester-0.9.0-py3-none-any.whl';
             console.log(`[worker] Trying PyPI fallback: ${pypiUrl}`);
             await micropip.install(pypiUrl);
             console.log("[worker] Installed ifctester from PyPI URL");
-        } catch (fallbackError) {
+        } catch (fallbackError: any) {
             console.error("[worker] Failed to install ifctester from PyPI:", fallbackError.message);
             const localUrl = config.wasm.ifctester_url ? resolveUrl(config.wasm.ifctester_url) : 'not configured';
             throw new Error(`Failed to install ifctester: ${error.message}. Make sure ifctester wheel is available locally at ${localUrl} or internet access is available.`);
@@ -186,17 +195,17 @@ async function cleanupEnvironment() {
     console.log("[worker] Closed environment");
 }
 
-async function handleApiCall({ method, args = [] }) {
+async function handleApiCall({ method, args = [] }: ApiCallPayload) {
     if (method === 'internal.cleanup') {
         await cleanupEnvironment();
         return true;
     }
 
     if (method in API.API) {
-        return await API.API[method](...args);
-    } else if (method in IDS.API) {
-        return await IDS.API[method](...args);
-    } else {
-        throw new Error(`[worker] Unknown API method: ${method}`);
+        return await (API.API as Record<string, (...params: unknown[]) => unknown>)[method](...args);
     }
+    if (method in IDS.API) {
+        return await (IDS.API as Record<string, (...params: unknown[]) => unknown>)[method](...args);
+    }
+    throw new Error(`[worker] Unknown API method: ${method}`);
 }

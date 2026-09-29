@@ -69,12 +69,30 @@ web/
 
 The app uses Pyodide to run Python code in the browser. Required packages are downloaded during build:
 
-- **ifctester**: IFC validation library
-- **ifcopenshell**: IFC file handling
+- **ifctester** 0.9.0: IFC validation library (pinned, must match `src/config.json`)
+- **ifcopenshell** 0.8.5+a51b2c5 (Pyodide 0.28 wasm build): IFC file handling
 - **odfpy**: ODF file support
-- **shapely**: Geometry operations
+- **shapely**, **sqlite3**: bundled with Pyodide (`sqlite3` is imported by ifctester >= 0.9's reporter)
 
-Run `.\scripts\download-packages.ps1` to download/update packages.
+Run `.\scripts\download-packages.ps1` (or `scripts/download-packages.sh`) to download/update packages.
+
+### ifctester 0.9 / ifcopenshell compatibility
+
+ifctester 0.9 calls `inst.get_attribute_category()`, `inst.get_argument_index()`,
+`inst.get_inverse_attribute_names()` and `inst.declaration` directly on
+`ifcopenshell.entity_instance`, but the available Pyodide 0.28 wasm build of ifcopenshell
+(0.8.5+a51b2c5, the one the official IfcTester webapp bundles) only exposes them on
+`inst.wrapped_data`. `public/worker/api.py` therefore installs a small shim
+(`install_ifcopenshell_compat`) that is a no-op on builds that already provide them.
+The newer 0.9.x wasm builds (`pyemscripten_2025_0`) could not be loaded under Pyodide 0.28
+("Unable to resolve module path"), so they are not used yet. Remove the shim once a compatible
+ifcopenshell wasm build is available.
+
+### Code layout
+
+The app follows the upstream IfcTester webapp (TypeScript, `npm run check` = tsc + svelte-check + biome).
+Our Revit/ArchiCAD integrations (`src/modules/api/revit.svelte.js`, `archicad.svelte.js`) and
+`src/lib/components/ui/copyable-text` remain plain JavaScript and are imported with an explicit `.js` extension.
 
 ## Deployment
 
