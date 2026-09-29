@@ -94,6 +94,21 @@ The app follows the upstream IfcTester webapp (TypeScript, `npm run check` = tsc
 Our Revit/ArchiCAD integrations (`src/modules/api/revit.svelte.js`, `archicad.svelte.js`) and
 `src/lib/components/ui/copyable-text` remain plain JavaScript and are imported with an explicit `.js` extension.
 
+## Tests (CI: `.github/workflows/web-tests.yml`)
+
+Covers the web app / Pyodide / ifctester side only (not the Revit or ArchiCAD code).
+
+| What | Command | Notes |
+|---|---|---|
+| Types, lint, version pins | `npm run check` | tsc, svelte-check, biome, `scripts/check-versions.mjs` |
+| Native reference | `pip install -r tests/python/requirements.txt && pytest tests/python` | desktop ifctester 0.9 vs `tests/fixtures/expected-*.json` |
+| In-browser audit | `bash scripts/download-packages.sh && npx playwright install chromium && npm run test:e2e` | real worker (Pyodide + wasm ifcopenshell + ifctester); must reproduce the native reference |
+
+Fixtures live in `tests/fixtures` (IFC4 + IFC2X3 model, IDS files covering every facet type, prohibited and optional specs).
+After an intentional ifctester behaviour change regenerate the expectations with
+`python tests/python/generate_expected.py` and review the diff. A weekly job also runs the newest released
+ifctester/ifcopenshell against the reference and warns when the compat shim in `public/worker/api.py` is no longer needed.
+
 ## Deployment
 
 See the root `README.md` for deployment instructions using the unified deployment script.

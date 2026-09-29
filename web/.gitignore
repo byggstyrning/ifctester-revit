@@ -25,3 +25,8 @@ dist-ssr
 
 .claude
 experiment/*
+test-results
+playwright-report
+
+__pycache__
+.pytest_cache

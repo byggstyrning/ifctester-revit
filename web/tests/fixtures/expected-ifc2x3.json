@@ -1,0 +1,32 @@
+[
+  {
+    "name": "wall name attribute",
+    "status": false,
+    "is_skipped": false,
+    "applicable": 2,
+    "applicable_fail": 1,
+    "requirements": [
+      [
+        "Attribute",
+        false,
+        1
+      ]
+    ]
+  },
+  {
+    "name": "no doors allowed",
+    "status": false,
+    "is_skipped": false,
+    "applicable": 1,
+    "applicable_fail": 0,
+    "requirements": []
+  },
+  {
+    "name": "no columns allowed",
+    "status": true,
+    "is_skipped": false,
+    "applicable": 0,
+    "applicable_fail": 0,
+    "requirements": []
+  }
+]
