@@ -2,15 +2,21 @@
  * IDS module
  */
 
-let pyodide = null;
+let pyodide: any = null;
 
 // IDS Python classes
-let Ids, Specification;
-let Entity, Attribute, Property, Material, Classification, PartOf;
+let Ids: any;
+let Specification: any;
+let Entity: any;
+let Attribute: any;
+let Property: any;
+let Material: any;
+let Classification: any;
+let PartOf: any;
 
-export async function init(pdide) {
+export async function init(pdide: any) {
     pyodide = pdide;
-    
+
     await pyodide.loadPackagesFromImports(`
         import ifctester.ids
         import ifctester.facet
@@ -19,7 +25,7 @@ export async function init(pdide) {
     // Import the core IDS classes
     Ids = pyodide.pyimport("ifctester.ids").Ids;
     Specification = pyodide.pyimport("ifctester.ids").Specification;
-    
+
     // Import facet classes
     Entity = pyodide.pyimport("ifctester.facet").Entity;
     Attribute = pyodide.pyimport("ifctester.facet").Attribute;
@@ -29,49 +35,48 @@ export async function init(pdide) {
     PartOf = pyodide.pyimport("ifctester.facet").PartOf;
 }
 
-function _idsToInstance(idsObj) {
+function _idsToInstance(idsObj: Record<string, unknown>) {
     const ids_raw = Ids();
     return ids_raw.parse(pyodide.toPy(idsObj))
 }
 
-export function createIDS() {
+export function createIDS(): Record<string, unknown> {
     const ids_raw = Ids()
     return ids_raw.asdict().toJs({dict_converter: Object.fromEntries});
 }
 
-export function openIDS(ids_xml, validate = false) {
+export function openIDS(ids_xml: string, validate = false): Record<string, unknown> {
     const ids_from_xml_string = pyodide.pyimport("api").ids_from_xml_string;
     const ids_raw = ids_from_xml_string(ids_xml, validate);
 
     return ids_raw.asdict().toJs({dict_converter: Object.fromEntries});
 }
 
-export function validateIDS(idsObj) {
+export function validateIDS(idsObj: Record<string, unknown>): { valid: boolean; html: string } {
     try {
         const ids_raw = _idsToInstance(idsObj)
         const tempFilename = `temp_${Date.now()}.xml`;
         const isValid = ids_raw.to_xml(tempFilename); // to_xml validates the XML as well, as far as I understand
-      
+
         pyodide.runPython(`
             import os
             if os.path.exists("${tempFilename}"):
                 os.remove("${tempFilename}")
         `);
-        
+
         if (isValid) {
             return {
                 valid: true,
                 html: '<div style="padding: 20px; color: #10b981;"><h2>✓ IDS Document is Valid</h2><p>The IDS document structure is valid and conforms to the IDS schema.</p></div>'
             };
-        } else {
-            return {
-                valid: false,
-                html: '<div style="padding: 20px; color: #ef4444;"><h2>✗ IDS Document Validation Failed</h2><p>The IDS document structure is invalid. Please check the document structure.</p></div>'
-            };
         }
+        return {
+            valid: false,
+            html: '<div style="padding: 20px; color: #ef4444;"><h2>✗ IDS Document Validation Failed</h2><p>The IDS document structure is invalid. Please check the document structure.</p></div>'
+        };
     } catch (error) {
         // Catch validation errors and format them as HTML
-        const errorMessage = error.toString();
+        const errorMessage = String(error);
         const errorHtml = `
             <div style="padding: 20px;">
                 <h2 style="color: #ef4444; margin-top: 0;">✗ IDS Document Validation Failed</h2>
@@ -87,12 +92,26 @@ export function validateIDS(idsObj) {
     }
 }
 
-export function exportIDS(idsObj) {
+export function exportIDS(idsObj: Record<string, unknown>): string {
     const ids_raw = _idsToInstance(idsObj)
     return ids_raw.to_string();
 }
 
-export function createSpecification({name = "Unnamed", ifcVersion = ["IFC2X3", "IFC4"], identifier = null, description = null, instructions = null, usage = "required"}) {
+export function createSpecification({
+    name = "Unnamed",
+    ifcVersion = ["IFC2X3", "IFC4"],
+    identifier = null,
+    description = null,
+    instructions = null,
+    usage = "required"
+}: {
+    name?: string;
+    ifcVersion?: string[];
+    identifier?: string | null;
+    description?: string | null;
+    instructions?: string | null;
+    usage?: string;
+} = {}): Record<string, unknown> {
     const spec = Specification.callKwargs({
         name: name,
         ifcVersion: ifcVersion,
@@ -106,7 +125,14 @@ export function createSpecification({name = "Unnamed", ifcVersion = ["IFC2X3", "
 }
 
 // @instructions
-export function createEntityFacet(clause, {name = "IFCWALL", predefinedType = null, instructions = null}) {
+export function createEntityFacet(
+    clause: string,
+    {name = "IFCWALL", predefinedType = null, instructions = null}: {
+        name?: string;
+        predefinedType?: string | null;
+        instructions?: string | null;
+    } = {}
+): Record<string, unknown> {
     const entity = Entity.callKwargs({
         name: name,
         predefinedType: predefinedType,
@@ -116,7 +142,15 @@ export function createEntityFacet(clause, {name = "IFCWALL", predefinedType = nu
 }
 
 // @cardinality, @instructions
-export function createAttributeFacet(clause, {name = "Name", value = null, cardinality = "required", instructions = null}) {
+export function createAttributeFacet(
+    clause: string,
+    {name = "Name", value = null, cardinality = "required", instructions = null}: {
+        name?: string;
+        value?: string | null;
+        cardinality?: string;
+        instructions?: string | null;
+    } = {}
+): Record<string, unknown> {
     const attribute = Attribute.callKwargs({
         name: name,
         value: value,
@@ -127,7 +161,16 @@ export function createAttributeFacet(clause, {name = "Name", value = null, cardi
 }
 
 // @uri, @cardinality, @instructions
-export function createClassificationFacet(clause, {value = null, system = null, uri = null, cardinality = "required", instructions = null}) {
+export function createClassificationFacet(
+    clause: string,
+    {value = null, system = null, uri = null, cardinality = "required", instructions = null}: {
+        value?: string | null;
+        system?: string | null;
+        uri?: string | null;
+        cardinality?: string;
+        instructions?: string | null;
+    } = {}
+): Record<string, unknown> {
     const classification = Classification.callKwargs({
         value: value,
         system: system,
@@ -139,7 +182,16 @@ export function createClassificationFacet(clause, {value = null, system = null, 
 }
 
 // @relation, @cardinality, @instructions
-export function createPartOfFacet(clause, {name = "IFCWALL", predefinedType = null, relation = null, cardinality = "required", instructions = null}) {
+export function createPartOfFacet(
+    clause: string,
+    {name = "IFCWALL", predefinedType = null, relation = null, cardinality = "required", instructions = null}: {
+        name?: string;
+        predefinedType?: string | null;
+        relation?: string | null;
+        cardinality?: string;
+        instructions?: string | null;
+    } = {}
+): Record<string, unknown> {
     const part_of = PartOf.callKwargs({
         name: name,
         predefinedType: predefinedType,
@@ -151,7 +203,26 @@ export function createPartOfFacet(clause, {name = "IFCWALL", predefinedType = nu
 }
 
 // @dataType, @uri, @cardinality, @instructions
-export function createPropertyFacet(clause, {propertySet = "Property_Set", baseName = "propertyName", value = null, dataType = null, uri = null, cardinality = "required", instructions = null}) {
+export function createPropertyFacet(
+    clause: string,
+    {
+        propertySet = "Property_Set",
+        baseName = "propertyName",
+        value = null,
+        dataType = null,
+        uri = null,
+        cardinality = "required",
+        instructions = null
+    }: {
+        propertySet?: string;
+        baseName?: string;
+        value?: string | null;
+        dataType?: string | null;
+        uri?: string | null;
+        cardinality?: string;
+        instructions?: string | null;
+    } = {}
+): Record<string, unknown> {
     const property = Property.callKwargs({
         propertySet: propertySet,
         baseName: baseName,
@@ -165,7 +236,15 @@ export function createPropertyFacet(clause, {propertySet = "Property_Set", baseN
 }
 
 // @uri, @cardinality, @instructions
-export function createMaterialFacet(clause, {value = null, uri = null, cardinality = "required", instructions = null}) {
+export function createMaterialFacet(
+    clause: string,
+    {value = null, uri = null, cardinality = "required", instructions = null}: {
+        value?: string | null;
+        uri?: string | null;
+        cardinality?: string;
+        instructions?: string | null;
+    } = {}
+): Record<string, unknown> {
     const material = Material.callKwargs({
         value: value,
         uri: uri,
@@ -176,7 +255,7 @@ export function createMaterialFacet(clause, {value = null, uri = null, cardinali
 }
 
 // Helper function to convert date to ISO format string
-export function formatDate(date) {
+export function formatDate(date?: string | number | Date | null): string | null {
     if (!date) return null;
     const d = new Date(date);
     return d.toISOString().split('T')[0];

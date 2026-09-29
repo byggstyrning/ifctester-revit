@@ -1,0 +1,102 @@
+[
+  {
+    "name": "wall name attribute",
+    "status": false,
+    "is_skipped": false,
+    "applicable": 2,
+    "applicable_fail": 1,
+    "requirements": [
+      [
+        "Attribute",
+        false,
+        1
+      ]
+    ]
+  },
+  {
+    "name": "wall fire rating property",
+    "status": false,
+    "is_skipped": false,
+    "applicable": 2,
+    "applicable_fail": 1,
+    "requirements": [
+      [
+        "Property",
+        false,
+        1
+      ]
+    ]
+  },
+  {
+    "name": "wall material",
+    "status": false,
+    "is_skipped": false,
+    "applicable": 2,
+    "applicable_fail": 1,
+    "requirements": [
+      [
+        "Material",
+        false,
+        1
+      ]
+    ]
+  },
+  {
+    "name": "wall contained in storey",
+    "status": true,
+    "is_skipped": false,
+    "applicable": 2,
+    "applicable_fail": 0,
+    "requirements": [
+      [
+        "PartOf",
+        true,
+        0
+      ]
+    ]
+  },
+  {
+    "name": "wall classification",
+    "status": false,
+    "is_skipped": false,
+    "applicable": 2,
+    "applicable_fail": 1,
+    "requirements": [
+      [
+        "Classification",
+        false,
+        1
+      ]
+    ]
+  },
+  {
+    "name": "no doors allowed",
+    "status": false,
+    "is_skipped": false,
+    "applicable": 1,
+    "applicable_fail": 0,
+    "requirements": []
+  },
+  {
+    "name": "no columns allowed",
+    "status": true,
+    "is_skipped": false,
+    "applicable": 0,
+    "applicable_fail": 0,
+    "requirements": []
+  },
+  {
+    "name": "optional slab name",
+    "status": true,
+    "is_skipped": true,
+    "applicable": 0,
+    "applicable_fail": 0,
+    "requirements": [
+      [
+        "Attribute",
+        true,
+        0
+      ]
+    ]
+  }
+]

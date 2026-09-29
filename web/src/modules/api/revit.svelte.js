@@ -4,7 +4,7 @@ import { error, success } from '../utils/toast.svelte.js';
 import hyperid from 'hyperid';
 
 // Revit connection state
-export let Revit = $state({
+export const Revit = $state({
     enabled: false,
     apiUrl: null,
     connected: false,

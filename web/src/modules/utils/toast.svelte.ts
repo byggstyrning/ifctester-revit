@@ -5,10 +5,11 @@ import { toast } from "svelte-sonner";
  * @param {Error|string} error - The error object or message
  * @returns {Object|null} - Parsed error info or null if not an IDS validation error
  */
-function parseIdsValidationError(error) {
-    const errorMessage = error?.message || error?.toString() || String(error);
-    const errorStack = error?.stack || '';
-    const fullError = errorMessage + '\n' + errorStack;
+function parseIdsValidationError(error: unknown) {
+    const err = error as { message?: string; stack?: string } | null | undefined;
+    const errorMessage = err?.message || err?.toString?.() || String(error);
+    const errorStack = err?.stack || '';
+    const fullError = `${errorMessage}\n${errorStack}`;
 
     // Check if it's an IDS validation error
     if (!fullError.includes('XMLSchema') && !fullError.includes('xmlschema') && !fullError.includes('IDS')) {
@@ -52,8 +53,8 @@ function parseIdsValidationError(error) {
     }
 
     // Build a user-friendly message
-    let userMessage = 'IDS Validation Error: The IDS document is not valid.';
-    let details = [];
+    const userMessage = 'IDS Validation Error: The IDS document is not valid.';
+    const details = [];
 
     // Generic IDS validation error
     if (reason) {
@@ -83,7 +84,7 @@ function parseIdsValidationError(error) {
  * Show an IDS validation error toast with orange/warning styling
  * @param {Error|string} error - The error object or message
  */
-export function idsValidationError(error) {
+export function idsValidationError(error: unknown) {
     const parsed = parseIdsValidationError(error);
     
     if (!parsed) {
@@ -95,13 +96,9 @@ export function idsValidationError(error) {
     // Using toast.warning with className and custom styling
     toast.warning(parsed.title, {
         description: parsed.details,
-        className: 'ids-validation-error-toast',
+        class: 'ids-validation-error-toast',
         duration: 10000, // Show for 10 seconds to give user time to read
-        style: {
-            backgroundColor: '#ff8c00',
-            borderColor: '#ff7a00',
-            color: '#ffffff'
-        }
+        style: 'background-color: #ff8c00; border-color: #ff7a00; color: #ffffff;'
     });
 }
 
@@ -109,7 +106,7 @@ export function idsValidationError(error) {
  * Show an error toast notification
  * @param {string} message - The error message to display
  */
-export function error(message) {
+export function error(message: string): void {
     toast.error(message);
 }
 
@@ -117,7 +114,7 @@ export function error(message) {
  * Show a success toast notification
  * @param {string} message - The success message to display
  */
-export function success(message) {
+export function success(message: string): void {
     toast.success(message);
 }
 
@@ -125,7 +122,7 @@ export function success(message) {
  * Show an info toast notification
  * @param {string} message - The info message to display
  */
-export function info(message) {
+export function info(message: string): void {
     toast.info(message);
 }
 
@@ -133,7 +130,7 @@ export function info(message) {
  * Show a warning toast notification
  * @param {string} message - The warning message to display
  */
-export function warning(message) {
+export function warning(message: string): void {
     toast.warning(message);
 }
 
@@ -142,7 +139,7 @@ export function warning(message) {
  * @param {string} message - The loading message to display
  * @returns {string} - Toast ID for dismissing later
  */
-export function loading(message) {
+export function loading(message: string): string | number {
     return toast.loading(message);
 }
 
@@ -150,7 +147,7 @@ export function loading(message) {
  * Dismiss a specific toast
  * @param {string} toastId - The toast ID to dismiss
  */
-export function dismiss(toastId) {
+export function dismiss(toastId: string | number): void {
     toast.dismiss(toastId);
 }
 
@@ -162,7 +159,13 @@ export function dismiss(toastId) {
  * @param {string} messages.success - Success message
  * @param {string} messages.error - Error message
  */
-export function promise(promiseToTrack, messages) {
+type PromiseToastMessages = {
+    loading: string;
+    success: string;
+    error: string;
+};
+
+export function promise<T>(promiseToTrack: Promise<T>, messages: PromiseToastMessages) {
     return toast.promise(promiseToTrack, {
         loading: messages.loading,
         success: messages.success,

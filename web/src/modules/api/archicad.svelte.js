@@ -4,7 +4,7 @@ import { error, success } from '../utils/toast.svelte.js';
 import hyperid from 'hyperid';
 
 // ArchiCAD connection state
-export let ArchiCAD = $state({
+export const ArchiCAD = $state({
     enabled: false,
     apiUrl: null,
     connected: false,

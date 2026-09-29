@@ -1,0 +1,40 @@
+{
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
+  "files": {
+    "ignore": [
+      "dist",
+      "node_modules",
+      "public/pyodide",
+      "**/*.svelte",
+      "scripts",
+      "vite.config.js",
+      "src/modules/api/revit.svelte.js",
+      "src/modules/api/archicad.svelte.js"
+    ]
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  },
+  "overrides": [
+    {
+      "include": [
+        "src/modules/wasm/worker/**"
+      ],
+      "linter": {
+        "rules": {
+          "suspicious": {
+            "noExplicitAny": "off"
+          }
+        }
+      }
+    }
+  ],
+  "css": {
+    "parser": {
+      "cssModules": true
+    }
+  }
+}

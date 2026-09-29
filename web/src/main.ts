@@ -13,8 +13,13 @@ console.log('[IfcTester] Browser Info:', {
     protocol: window.location.protocol
 });
 
+const root = document.getElementById('root');
+if (!root) {
+    throw new Error('Missing root element');
+}
+
 const app = mount(App, {
-    target: document.getElementById('root'),
+    target: root,
 });
 
 export default app;

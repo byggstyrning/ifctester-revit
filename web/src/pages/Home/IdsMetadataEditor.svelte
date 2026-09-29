@@ -1,18 +1,22 @@
-<script>
-    import * as IDS from "$src/modules/api/ids.svelte.js";
+<script lang="ts">
+    import * as IDS from "$src/modules/api/ids.svelte";
     import wasm from "$src/modules/wasm";
-    import { error, success } from "$src/modules/utils/toast.svelte.js";
-    
-    let activeDocument = $derived(IDS.Module.activeDocument ? IDS.Module.documents[IDS.Module.activeDocument] : null);
-    let validationResult = $state(null);
+    import { error, success } from "$src/modules/utils/toast.svelte";
+    import type { IdsDocument, IdsInfo } from "$src/types/ids";
+
+    let activeDocument = $derived(
+        IDS.Module.activeDocument ? (IDS.Module.documents[IDS.Module.activeDocument] as IdsDocument) : null
+    );
+    let validationResult = $state<{ valid: boolean; html: string } | null>(null);
     let showPreview = $state(false);
     let isValidating = $state(false);
 
-    const getProp = (prop) => {
+    const getProp = (prop: keyof IdsInfo) => {
         return activeDocument?.info[prop] ?? "";
     };
     
-    const setProp = (prop, value) => {
+    const setProp = (prop: keyof IdsInfo, value: string) => {
+        if (!activeDocument) return;
         activeDocument.info[prop] = value;
     };
     
@@ -25,7 +29,7 @@
         try {
             isValidating = true;
             const doc = $state.snapshot(activeDocument);
-            const result = await wasm.validateIDS(doc);
+            const result = (await wasm.validateIDS(doc)) as { valid: boolean; html: string };
             validationResult = result;
             showPreview = true;
             
@@ -36,10 +40,11 @@
             }
         } catch (err) {
             console.error('Validation error:', err);
-            error(`Validation failed: ${err.message}`);
+            const message = err instanceof Error ? err.message : String(err);
+            error(`Validation failed: ${message}`);
             validationResult = {
                 valid: false,
-                html: `<div style="padding: 20px; color: #ef4444;"><h2>✗ Validation Error</h2><p>${err.message}</p></div>`
+                html: `<div style="padding: 20px; color: #ef4444;"><h2>✗ Validation Error</h2><p>${message}</p></div>`
             };
             showPreview = true;
         } finally {
@@ -72,36 +77,36 @@
     </div>
     <div class="form-grid">
         <div class="form-group">
-            <label>Title</label>
-            <input class="form-input" type="text" bind:value={() => getProp("title"), (v) => setProp("title", v)} placeholder="Enter IDS title">
+            <label for="ids-title">Title</label>
+            <input class="form-input" id="ids-title" type="text" bind:value={() => getProp("title"), (v) => setProp("title", v)} placeholder="Enter IDS title">
         </div>
         <div class="form-group">
-            <label>Author Email</label>
-            <input class="form-input" type="email" bind:value={() => getProp("author"), (v) => setProp("author", v)} placeholder="Enter author">
+            <label for="ids-author">Author Email</label>
+            <input class="form-input" id="ids-author" type="email" bind:value={() => getProp("author"), (v) => setProp("author", v)} placeholder="Enter author">
         </div>
         <div class="form-group">
-            <label>Version</label>
-            <input class="form-input" type="text" bind:value={() => getProp("version"), (v) => setProp("version", v)} placeholder="Enter version">
+            <label for="ids-version">Version</label>
+            <input class="form-input" id="ids-version" type="text" bind:value={() => getProp("version"), (v) => setProp("version", v)} placeholder="Enter version">
         </div>
         <div class="form-group">
-            <label>Date</label>
-            <input class="form-input" type="date" bind:value={() => getProp("date"), (v) => setProp("date", v)}>
+            <label for="ids-date">Date</label>
+            <input class="form-input" id="ids-date" type="date" bind:value={() => getProp("date"), (v) => setProp("date", v)}>
         </div>
         <div class="form-group full-width">
-            <label>Description</label>
-            <textarea class="form-input" bind:value={() => getProp("description"), (v) => setProp("description", v)} placeholder="Enter description" rows="3"></textarea>
+            <label for="ids-description">Description</label>
+            <textarea class="form-input" id="ids-description" bind:value={() => getProp("description"), (v) => setProp("description", v)} placeholder="Enter description" rows="3"></textarea>
         </div>
         <div class="form-group">
-            <label>Purpose</label>
-            <input class="form-input" type="text" bind:value={() => getProp("purpose"), (v) => setProp("purpose", v)} placeholder="Enter purpose">
+            <label for="ids-purpose">Purpose</label>
+            <input class="form-input" id="ids-purpose" type="text" bind:value={() => getProp("purpose"), (v) => setProp("purpose", v)} placeholder="Enter purpose">
         </div>
         <div class="form-group">
-            <label>Milestone</label>
-            <input class="form-input" type="text" bind:value={() => getProp("milestone"), (v) => setProp("milestone", v)} placeholder="Enter milestone">
+            <label for="ids-milestone">Milestone</label>
+            <input class="form-input" id="ids-milestone" type="text" bind:value={() => getProp("milestone"), (v) => setProp("milestone", v)} placeholder="Enter milestone">
         </div>
         <div class="form-group full-width">
-            <label>Copyright</label>
-            <input class="form-input" type="text" bind:value={() => getProp("copyright"), (v) => setProp("copyright", v)} placeholder="Enter copyright">
+            <label for="ids-copyright">Copyright</label>
+            <input class="form-input" id="ids-copyright" type="text" bind:value={() => getProp("copyright"), (v) => setProp("copyright", v)} placeholder="Enter copyright">
         </div>
     </div>
     
