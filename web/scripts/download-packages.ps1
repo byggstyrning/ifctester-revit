@@ -36,18 +36,6 @@ try {
     $ifctesterUrl = $wheel.url
     $ifctesterFileName = $wheel.filename
     Write-Host "  Found ifctester version $latestVersion" -ForegroundColor Green
-} catch { [version]"0.0.0" } } -Descending
-    $latestVersion = ($validVersions | Select-Object -First 1).Name
-    $files = $pypiResponse.releases.$latestVersion
-    $wheel = $files | Where-Object { $_.filename -like "*.whl" } | Select-Object -First 1
-    
-    if (-not $wheel) {
-        throw "No wheel file found for ifctester $latestVersion"
-    }
-    
-    $ifctesterUrl = $wheel.url
-    $ifctesterFileName = $wheel.filename
-    Write-Host "  Found ifctester version $latestVersion" -ForegroundColor Green
 } catch {
     Write-Host "  WARNING: Could not fetch version info, using fallback" -ForegroundColor Yellow
     $ifctesterUrl = "https://files.pythonhosted.org/packages/e2/2e/c731c6a784c28b6f28a03c02d3796667c8617128febac83c6df7266fd742/ifctester-0.9.0-py3-none-any.whl"
