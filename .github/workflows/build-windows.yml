@@ -222,7 +222,9 @@ jobs:
 
   build_archicad:
     name: Build Archicad installer (Windows)
-    runs-on: windows-latest
+    # The ArchiCAD add-on is configured with the "Visual Studio 17 2022" generator / v143 toolset,
+    # which windows-latest no longer ships, so pin the image that still has VS 2022.
+    runs-on: windows-2022
 
     steps:
       - name: Checkout code
