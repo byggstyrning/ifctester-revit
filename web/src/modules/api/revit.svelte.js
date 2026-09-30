@@ -1,15 +1,31 @@
-import { IFCModels, loadIfc, auditIfc, runAudit as runBrowserAudit } from './api.svelte.js';
+import { IFCModels, loadIfc, auditIfc, clearAllModels, runAudit as runBrowserAudit } from './api.svelte.js';
 import * as IDS from './ids.svelte.js';
-import { error, success } from '../utils/toast.svelte.js';
+import { error, success, idsValidationError } from '../utils/toast.svelte.js';
 import hyperid from 'hyperid';
 
+/**
+ * @typedef {Object} RevitState
+ * @property {boolean} enabled
+ * @property {string | null} apiUrl
+ * @property {boolean} connected
+ * @property {boolean} auditing
+ * @property {boolean} loading
+ * @property {string[]} capabilities - Optional features the connected add-in reports in /status (e.g. "writeback")
+ * @property {string} exportConfiguration - IFC export configuration last selected in the toolbar
+ * @property {boolean} exporting
+ */
+
 // Revit connection state
+/** @type {RevitState} */
 export const Revit = $state({
     enabled: false,
     apiUrl: null,
     connected: false,
     auditing: false,
-    loading: false
+    loading: false,
+    capabilities: [],
+    exportConfiguration: '',
+    exporting: false
 });
 
 const id = hyperid();
@@ -75,6 +91,9 @@ export const connect = async () => {
             clearTimeout(timeoutId);
             
             if (response.ok) {
+                // Add-ins older than the write-back release report no capabilities
+                const status = await response.json().catch(() => null);
+                Revit.capabilities = Array.isArray(status?.capabilities) ? status.capabilities : [];
                 Revit.connected = true;
                 success('Connected to Revit');
                 return true;
@@ -111,6 +130,7 @@ export const connect = async () => {
  */
 export const disconnect = () => {
     Revit.connected = false;
+    Revit.capabilities = [];
     success('Disconnected from Revit');
 };
 
@@ -396,4 +416,59 @@ export const exportIfc = async (configurationName) => {
     }
 };
 
+/**
+ * Export the active view from Revit, load the result and audit it against the active IDS document.
+ * Replaces the loaded models and their audit reports.
+ * @param {string} configurationName - Name of the IFC export configuration to use
+ * @returns {Promise<boolean>} Returns true when the export was loaded
+ */
+export const exportAndAudit = async (configurationName) => {
+    if (!configurationName) {
+        error('Please select an IFC export configuration');
+        return false;
+    }
 
+    if (Revit.exporting) {
+        return false;
+    }
+
+    try {
+        Revit.exporting = true;
+        Revit.exportConfiguration = configurationName;
+
+        // Clear all existing models before loading the new export
+        await clearAllModels();
+
+        const exportedFile = await exportIfc(configurationName);
+        if (!exportedFile) {
+            return false;
+        }
+
+        // Automatically load the exported IFC file
+        await loadIfc(exportedFile);
+        success('IFC exported and loaded successfully');
+
+        // Automatically run audit if IDS document is active
+        if (IDS.Module.activeDocument) {
+            try {
+                await runBrowserAudit();
+                success('Audit completed successfully');
+            } catch (auditErr) {
+                console.error('Auto-audit failed: ', auditErr);
+                // Check if it's an IDS validation error - show it even for auto-audit
+                const message = auditErr instanceof Error ? auditErr.message : String(auditErr);
+                if (message.includes('XMLSchema') || message.includes('xmlschema') || message.includes('IDS')) {
+                    idsValidationError(auditErr);
+                }
+                // Otherwise, don't show error toast for auto-audit failure, just log it
+            }
+        }
+
+        return true;
+    } catch (err) {
+        error(`Failed to export IFC: ${err instanceof Error ? err.message : String(err)}`);
+        return false;
+    } finally {
+        Revit.exporting = false;
+    }
+};

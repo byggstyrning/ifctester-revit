@@ -166,6 +166,10 @@ Both plugins expose a local HTTP API for communication with the web interface:
 | `/select-by-guid/{guid}` | GET | Select element by IFC GUID |
 | `/ifc-configurations` | GET | List IFC export configurations |
 | `/export-ifc` | POST | Export model to IFC |
+| `/resolve-parameters` | POST | Revit only: find the parameters a failed IDS property or attribute could be fixed in |
+| `/apply-changes` | POST | Revit only: write fix values to those parameters in one transaction |
+
+The two write-back endpoints are described in [web/README.md](web/README.md#write-back).
 
 **Default Ports:**
 - Revit: `48881`

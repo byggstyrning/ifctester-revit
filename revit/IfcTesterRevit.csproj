@@ -94,4 +94,9 @@
         <Folder Include="Models" />
     </ItemGroup>
 
+    <ItemGroup>
+        <!-- Checks run by Writeback\verify\run.ps1; the console check there has its own project. -->
+        <Compile Remove="Writeback\verify\**" />
+    </ItemGroup>
+
 </Project>

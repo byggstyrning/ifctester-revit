@@ -6,6 +6,10 @@
     import * as CopyableText from "$src/lib/components/ui/copyable-text";
     import { Revit, selectElement as selectElementRevit } from "$src/modules/api/revit.svelte.js";
     import { ArchiCAD, selectElement as selectElementArchiCAD } from "$src/modules/api/archicad.svelte.js";
+    import * as Writeback from "$src/modules/api/writeback.svelte";
+    import FixCell from "$src/components/writeback/FixCell.svelte";
+    import FixAllControl from "$src/components/writeback/FixAllControl.svelte";
+    import PendingChanges from "$src/components/writeback/PendingChanges.svelte";
     import type { AuditReport, AuditReportData } from "$src/types/report";
     import type { DocumentState, Facet, IdsDocument, Specification } from "$src/types/ids";
 
@@ -193,6 +197,9 @@
         Revit.enabled && Revit.connected ? 'Revit' : null
     );
 
+    // Fixing failures from here needs a connected Revit add-in that reports the write-back capability
+    const writebackAvailable = $derived(Writeback.isAvailable());
+
     const handleActivation = (event: KeyboardEvent, action: () => void) => {
         if (event.key === 'Enter' || event.key === ' ') {
             event.preventDefault();
@@ -266,6 +273,10 @@
                     <div class="progress-fill" style="width: {auditReport.data.percent_checks_pass}%"></div>
                 </div>
             </div>
+        {/if}
+
+        {#if writebackAvailable}
+            <PendingChanges hasAudit={!!auditReport} />
         {/if}
     </div>
 
@@ -637,9 +648,13 @@
                                                                     {/if}
                                                                     
                                                                     {#if reqAuditData.failed_entities && reqAuditData.failed_entities.length > 0}
+                                                                        {@const fixTarget = auditReport && writebackAvailable ? Writeback.getWritebackTarget(reqAuditData) : null}
                                                                         <div class="entity-table-section fail">
                                                                             <h4>Failed Elements ({reqAuditData.failed_entities.length})</h4>
-                                                                            <div class="entity-table-container">
+                                                                            {#if auditReport && fixTarget}
+                                                                                <FixAllControl auditId={auditReport.id} specIndex={index} reqIndex={item.reqIndex} target={fixTarget} requirement={reqAuditData} />
+                                                                            {/if}
+                                                                            <div class="entity-table-container" class:with-fix={!!fixTarget}>
                                                                                 <Tooltip.Provider>
                                                                                     <table class="entity-table">
                                                                                     <thead>
@@ -654,10 +669,13 @@
                                                                                             <th>Warning</th>
                                                                                             <th>GlobalId</th>
                                                                                             <th>Tag</th>
+                                                                                            {#if fixTarget}
+                                                                                                <th>Fix in Revit</th>
+                                                                                            {/if}
                                                                                         </tr>
                                                                                     </thead>
                                                                                     <tbody>
-                                                                                        {#each reqAuditData.failed_entities.slice(0, 10) as entity}
+                                                                                        {#each reqAuditData.failed_entities.slice(0, 10) as entity, rowIndex}
                                                                                             <tr>
                                                                                                 {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
                                                                                                     <td>
@@ -679,11 +697,16 @@
                                                                                                 <td><CopyableText.Root value={entity.reason || '-'} /></td>
                                                                                                 <td><CopyableText.Root value={entity.global_id || '-'} /></td>
                                                                                                 <td><CopyableText.Root value={entity.tag || '-'} /></td>
+                                                                                                {#if auditReport && fixTarget}
+                                                                                                    <td class="fix-column">
+                                                                                                        <FixCell auditId={auditReport.id} specIndex={index} reqIndex={item.reqIndex} {rowIndex} target={fixTarget} {entity} />
+                                                                                                    </td>
+                                                                                                {/if}
                                                                                             </tr>
                                                                                         {/each}
                                                                                         {#if reqAuditData.failed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={isBimToolConnected ? 8 : 7}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
+                                                                                                <td colspan={(isBimToolConnected ? 8 : 7) + (fixTarget ? 1 : 0)}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>
@@ -1301,6 +1324,16 @@
 
     .entity-table tbody tr:hover {
         background: #ffffff08;
+    }
+
+    /* The fix column holds an input, so it must not be clipped like the text columns */
+    .entity-table-container.with-fix {
+        overflow-x: auto;
+    }
+
+    .entity-table td.fix-column {
+        max-width: none;
+        overflow: visible;
     }
 
     .entity-table .more-row td {

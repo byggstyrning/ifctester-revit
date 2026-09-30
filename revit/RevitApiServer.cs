@@ -985,6 +985,12 @@ public class RevitApiServer : IDisposable
     private ExportIfcEventHandler? _eventHandlerExportIfc;
     private bool _configsLoaded = false;
     private readonly object _configsLock = new object();
+
+    // Write-back (POST /resolve-parameters, POST /apply-changes): one queued external event
+    private readonly Writeback.RevitWorkQueue _writebackQueue = new();
+    private readonly Writeback.WritebackEndpoints _writeback;
+    // The IFC export setup of the last export, which is the one the audited IFC came from
+    private volatile string? _lastExportConfiguration;
     
     // Export job tracking for async polling
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ExportJob> _exportJobs = new();
@@ -1016,6 +1022,7 @@ public class RevitApiServer : IDisposable
     {
         _port = port;
         _baseUrl = $"http://localhost:{port}/";
+        _writeback = new Writeback.WritebackEndpoints(_writebackQueue, () => _lastExportConfiguration);
     }
 
     public bool IsRunning => _isRunning;
@@ -1042,6 +1049,8 @@ public class RevitApiServer : IDisposable
         
         _eventHandlerExportIfc = new ExportIfcEventHandler();
         _externalEventExportIfc = ExternalEvent.Create(_eventHandlerExportIfc);
+
+        _writebackQueue.Start();
 
         try
         {
@@ -1158,6 +1167,14 @@ public class RevitApiServer : IDisposable
             else if (path == "/export-ifc" && method == "POST")
             {
                 await HandleExportIfc(request, response);
+            }
+            else if (path == "/resolve-parameters" && method == "POST")
+            {
+                await HandleWriteback(request, response, _writeback.ResolveParameters);
+            }
+            else if (path == "/apply-changes" && method == "POST")
+            {
+                await HandleWriteback(request, response, _writeback.ApplyChanges);
             }
             else if (path.StartsWith("/export-status/") && method == "GET")
             {
@@ -1277,7 +1294,8 @@ public class RevitApiServer : IDisposable
             status = configsReady ? "ok" : "initializing",
             connected = true,
             configsReady = configsReady,
-            version = "1.4.0"
+            version = "1.4.0",
+            capabilities = new[] { "writeback" }
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(status);
@@ -1457,6 +1475,7 @@ public class RevitApiServer : IDisposable
             }
 
             var configName = requestData["configuration"];
+            _lastExportConfiguration = configName;
             
             // Generate unique job ID and create job entry
             var jobId = Guid.NewGuid().ToString();
@@ -1517,6 +1536,26 @@ public class RevitApiServer : IDisposable
             System.Diagnostics.Debug.WriteLine($"HandleExportIfc exception: {ex.Message}\n{ex.StackTrace}");
             await SendError(response, 500, $"Failed to start IFC export: {ex.Message}");
         }
+    }
+    
+    private async Task HandleWriteback(HttpListenerRequest request, HttpListenerResponse response, Func<string, Task<Writeback.WritebackHttpResult>> handler)
+    {
+        if (_uiApplication == null)
+        {
+            await SendError(response, 503, "Revit application not available");
+            return;
+        }
+
+        // JSON is UTF-8; request.ContentEncoding falls back to the system code page without a charset
+        using var reader = new StreamReader(request.InputStream, Encoding.UTF8);
+        var body = await reader.ReadToEndAsync();
+
+        var result = await handler(body);
+        response.StatusCode = result.StatusCode;
+        response.ContentType = "application/json";
+        var buffer = Encoding.UTF8.GetBytes(result.Json);
+        response.ContentLength64 = buffer.Length;
+        await response.OutputStream.WriteAsync(buffer, 0, buffer.Length);
     }
     
     private async Task HandleExportStatus(HttpListenerResponse response, string jobId)

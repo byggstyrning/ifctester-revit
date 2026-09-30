@@ -26,6 +26,7 @@ Outputs to `dist/` folder.
 - **IDS Authoring**: Create and edit Information Delivery Specifications
 - **IFC Validation**: Validate IFC models against IDS requirements using WebAssembly/Pyodide
 - **Revit Integration**: Select elements in Revit directly from validation reports
+- **Revit Write-back**: Type the correct value next to a failed element and apply it to the open Revit model
 - **Browser-Based**: Runs entirely in the browser - no server required
 
 ## Revit Integration
@@ -46,6 +47,27 @@ The Revit plugin automatically injects the API URL into the web app. The API ser
 ### Element Selection
 
 Elements are selected by their IFC GlobalId (GUID), not by Revit Element ID. This ensures accurate selection even when IFC files are modified.
+
+### Write-back
+
+When the connected add-in reports `"capabilities": ["writeback"]` in `GET /status`, the failed-elements
+tables in the audit results get a **Fix in Revit** column.
+
+1. **Enter fixes**: type a value next to a failed element, or use *Set all N failed to* for a whole
+   requirement. A requirement with one allowed value prefills it; an enumeration is offered as suggestions.
+2. **Review**: *Review changes* asks Revit (`POST /resolve-parameters`) which parameter on which element each
+   change would write to, and shows the current and the new value. With several candidate parameters the
+   user picks one. Type parameters are marked, because they change every instance of the type.
+3. **Apply**: *Apply to Revit* sends the reviewed changes (`POST /apply-changes`). Revit writes them in one
+   transaction, so one Ctrl+Z undoes them. Changes Revit refuses stay pending with its message.
+4. **Confirm**: *Re-export and re-audit* runs the normal export with the configuration selected in the toolbar.
+
+In scope are `Property` requirements that name one property set and one property, and `Attribute`
+requirements for `Name`, `Description`, `ObjectType` and `LongName`. Every other failure shows the reason
+in place of an input. Pending changes belong to one audit and are dropped when it is replaced.
+
+The code is in `src/modules/api/writeback.svelte.ts` (state and the two API calls) and
+`src/components/writeback/`.
 
 ## Project Structure
 
@@ -96,13 +118,14 @@ Our Revit/ArchiCAD integrations (`src/modules/api/revit.svelte.js`, `archicad.sv
 
 ## Tests (CI: `.github/workflows/web-tests.yml`)
 
-Covers the web app / Pyodide / ifctester side only (not the Revit or ArchiCAD code).
+Covers the web app / Pyodide / ifctester side only (not the Revit or ArchiCAD code; the write-back spec mocks the Revit API).
 
 | What | Command | Notes |
 |---|---|---|
 | Types, lint, version pins | `npm run check` | tsc, svelte-check, biome, `scripts/check-versions.mjs` |
 | Native reference | `pip install -r tests/python/requirements.txt && pytest tests/python` | desktop ifctester 0.9 vs `tests/fixtures/expected-*.json` |
 | In-browser audit | `bash scripts/download-packages.sh && npx playwright install chromium && npm run test:e2e` | real worker (Pyodide + wasm ifcopenshell + ifctester); must reproduce the native reference |
+| Revit write-back | same `npm run test:e2e` (`tests/e2e/writeback.spec.ts`) | the real UI against a mocked Revit API (Playwright route interception); asserts the bodies sent to `/resolve-parameters` and `/apply-changes` |
 
 Fixtures live in `tests/fixtures` (IFC4 + IFC2X3 model, IDS files covering every facet type, prohibited and optional specs).
 After an intentional ifctester behaviour change regenerate the expectations with

@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Console check of the write-back classes that need no Revit. Started by ..\run.ps1. -->
+    <PropertyGroup>
+        <OutputType>Exe</OutputType>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <LangVersion>latest</LangVersion>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <Compile Include="..\..\IfcGuid.cs" />
+        <Compile Include="..\..\PsetMapping.cs" />
+        <Compile Include="..\..\ValueParsing.cs" />
+        <Compile Include="..\..\WritebackContracts.cs" />
+    </ItemGroup>
+
+</Project>

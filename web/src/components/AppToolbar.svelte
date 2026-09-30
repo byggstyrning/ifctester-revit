@@ -5,7 +5,7 @@
     import { error, success, idsValidationError } from "$src/modules/utils/toast.svelte";
     import { ChevronRightIcon, LinkIcon, XIcon } from "@lucide/svelte";
     import { Bonsai, connect, disconnect, runAudit as runBonsaiAudit } from "$src/modules/api/bonsai.svelte";
-    import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportIfc } from "$src/modules/api/revit.svelte.js";
+    import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportAndAudit } from "$src/modules/api/revit.svelte.js";
     import { ArchiCAD, connect as connectArchiCAD, disconnect as disconnectArchiCAD, runAudit as runArchiCADAudit, getIfcConfigurations as getArchiCADIfcConfigurations, exportIfc as exportArchiCADIfc } from "$src/modules/api/archicad.svelte.js";
     import { onMount } from 'svelte';
     import type { AuditReport } from "$src/types/report";
@@ -72,7 +72,10 @@
             isLoadingConfigs = true;
             const configs = await getIfcConfigurations();
             ifcConfigurations = configs as unknown as { name: string }[];
-            // Don't auto-select - let user choose
+            // Don't auto-select - let user choose, but keep the choice made earlier in this session
+            if (!selectedIfcConfig && (configs as string[]).includes(Revit.exportConfiguration)) {
+                selectedIfcConfig = Revit.exportConfiguration;
+            }
         } catch (err) {
             console.error('Failed to load IFC configurations:', err);
         } finally {
@@ -105,35 +108,8 @@
 
         try {
             isExportingIfc = true;
-
-            // Clear all existing models before loading the new export
-            await clearAllModels();
-
-            const exportedFile = await exportIfc(selectedIfcConfig);
-
-            if (exportedFile) {
-                // Automatically load the exported IFC file
-                await loadIfc(exportedFile);
-                success('IFC exported and loaded successfully');
-
-                // Automatically run audit if IDS document is active
-                if (IDS.Module.activeDocument) {
-                    try {
-                        await runAudit();
-                        success('Audit completed successfully');
-                    } catch (auditErr) {
-                        console.error("Auto-audit failed: ", auditErr);
-                        // Check if it's an IDS validation error - show it even for auto-audit
-                        const message = errorMessage(auditErr);
-                        if (message.includes('XMLSchema') || message.includes('xmlschema') || message.includes('IDS')) {
-                            idsValidationError(auditErr);
-                        }
-                        // Otherwise, don't show error toast for auto-audit failure, just log it
-                    }
-                }
-            }
-        } catch (err) {
-            error(`Failed to export IFC: ${errorMessage(err)}`);
+            // Export, load and audit; shared with the write-back re-export
+            await exportAndAudit(selectedIfcConfig);
         } finally {
             isExportingIfc = false;
         }
@@ -244,6 +220,13 @@
         }
     });
     
+    // The write-back re-export uses the configuration selected here
+    $effect(() => {
+        if (activeTab === 'revit' && selectedIfcConfig) {
+            Revit.exportConfiguration = selectedIfcConfig;
+        }
+    });
+
     const handleBonsaiAudit = async () => {
         const auditId = await runBonsaiAudit();
         if (auditId) {
@@ -635,7 +618,7 @@
                                         <select 
                                             class="config-select"
                                             bind:value={selectedIfcConfig}
-                                            disabled={isExportingIfc}
+                                            disabled={isExportingIfc || Revit.exporting}
                                         >
                                             <option value="" disabled>Select your IFC Export Configuration</option>
                                             {#each ifcConfigurations as config}
@@ -645,9 +628,9 @@
                                         <button 
                                             class="export-btn"
                                             onclick={handleExportIfc}
-                                            disabled={isExportingIfc || !selectedIfcConfig}
+                                            disabled={isExportingIfc || Revit.exporting || !selectedIfcConfig}
                                         >
-                                            {#if isExportingIfc}
+                                            {#if isExportingIfc || Revit.exporting}
                                                 <svg class="spinner" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                                     <path d="M21 12a9 9 0 11-6.219-8.56"/>
                                                 </svg>
