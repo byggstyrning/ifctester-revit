@@ -19,6 +19,25 @@ from Autodesk.Revit.DB import *
 clr.AddReference('System.Net.Http')
 from System.Net.Http import HttpClient, HttpMethod, HttpRequestMessage, StringContent
 
+
+def json_string(value):
+    # IronPython's json.dumps fails on non-ASCII paths ('unknown' codec), so escape by hand.
+    out = []
+    for ch in value:
+        if ch == '"' or ch == chr(92):
+            out.append(chr(92) + ch)
+        elif 32 <= ord(ch) < 127:
+            out.append(ch)
+        else:
+            out.append(chr(92) + 'u%04x' % ord(ch))
+    return '"' + ''.join(out) + '"'
+
+
+def escape_query(value):
+    # System.Uri is not reachable from pyRevit's IronPython on .NET 8 without an extra assembly reference.
+    safe = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~'
+    return ''.join(ch if ch in safe else ''.join('%%%02X' % b for b in bytearray(ch.encode('utf-8'))) for ch in value)
+
 OUT = os.environ['IFCTESTER_WB_OUT']
 DLL = os.environ['IFCTESTER_WB_DLL']
 YEAR = __revit__.Application.VersionNumber
@@ -158,16 +177,16 @@ try:
     check('setup files', (status, '"psetFileExists":false' in body, 'does-not-exist.txt' in body, 'The setup' in body), (200, True, True, True))
     status, body = get('/ifc-configuration-files?name=No%20Such%20Setup')
     check('unknown setup -> 404', status, 404)
-    status, body = get('/pset-files?dir=' + System.Uri.EscapeDataString(OUT))
+    status, body = get('/pset-files?dir=' + escape_query(OUT))
     log('pset files ->', status, body)
     check('folder listing', (status, '"name":"psets.txt"' in body, '"modified":"' in body), (200, True, True))
-    status, body = get('/pset-files?dir=' + System.Uri.EscapeDataString(os.path.join(OUT, 'no-such-folder')))
+    status, body = get('/pset-files?dir=' + escape_query(os.path.join(OUT, 'no-such-folder')))
     check('missing folder -> 400', status, 400)
     status, body = get('/pset-files')
     check('no folder -> 400', status, 400)
 
     # an override file that does not exist fails the export before Revit is asked to export
-    status, body, response = post('/export-ifc', u'{"configuration":"WB Test Setup","psetFile":%s}' % json.dumps(os.path.join(OUT, u'saknas åäö.txt')))
+    status, body, response = post('/export-ifc', u'{"configuration":"WB Test Setup","psetFile":%s}' % json_string(os.path.join(OUT, u'saknas ' + unichr(0xe5) + unichr(0xe4) + unichr(0xf6) + u'.txt')))
     job = json.loads(body)['jobId'] if status == 200 else None
     status, body = get('/export-status/%s' % job)
     log('export with a missing override ->', status, body)
