@@ -53,7 +53,7 @@ try:
 
     clr.AddReferenceToFileAndPath(DLL)
     from IfcTesterRevit import RevitApiServer
-    from IfcTesterRevit.Writeback import IfcGuid, WritebackService
+    from IfcTesterRevit.Writeback import ExportRequestSettings, IfcGuid, WritebackService
 
     import json
     ids = json.load(io.open(os.path.join(OUT, 'wb-model-%s.json' % YEAR), encoding='utf-8'))
@@ -85,6 +85,12 @@ try:
             queue.Execute(uiapp)
             time.sleep(0.1)
         return task.IsCompleted
+
+    def get(path):
+        task = client.GetAsync(BASE + path)
+        if not pump(task):
+            return None, 'timed out'
+        return int(task.Result.StatusCode), task.Result.Content.ReadAsStringAsync().Result
 
     def post(path, body):
         task = client.PostAsync(BASE + path, StringContent(body, System.Text.Encoding.UTF8, 'application/json'))
@@ -129,9 +135,44 @@ try:
     check('setup named in the request', ('"source":"pset-mapping-file"' in body, '"configuration":"WB Test Setup"' in body, 'psets.txt"]' in body), (True, True, True))
     status, body, response = post('/resolve-parameters', u'{"items":[%s]}' % brand)
     check('no setup known -> no mapping, with a note', ('"candidates":[]' in body, '"mappingFiles":[]' in body, '"mappingNote":"No IFC export setup' in body), (True, True, True))
-    server.GetType().GetField('_lastExportConfiguration', BindingFlags.NonPublic | BindingFlags.Instance).SetValue(server, 'WB Test Setup')
+    last_export = server.GetType().GetField('_lastExport', BindingFlags.NonPublic | BindingFlags.Instance)
+    last_export.SetValue(server, ExportRequestSettings('WB Test Setup', None, None))
     status, body, response = post('/resolve-parameters', u'{"items":[%s]}' % brand)
     check('setup of the last export', ('"source":"pset-mapping-file"' in body, '"configuration":"WB Test Setup"' in body), (True, True))
+
+    # a property set file override: the setup's own file is missing, the override replaces it
+    psets = os.path.join(OUT, 'psets.txt')
+    status, body, response = post('/resolve-parameters', u'{"configuration":"WB Missing File","items":[%s]}' % brand)
+    check('missing setup file -> no mapping, with a note', ('"mappingFiles":[]' in body, 'was not found' in body), (True, True))
+    status, body, response = post('/resolve-parameters', u'{"configuration":"WB Missing File","psetFile":%s,"items":[%s]}' % (json.dumps(psets), brand))
+    check('override named in the request', ('"source":"pset-mapping-file"' in body, '"mappingNote":null' in body, 'psets.txt"]' in body), (True, True, True))
+    last_export.SetValue(server, ExportRequestSettings('WB Missing File', psets, None))
+    status, body, response = post('/resolve-parameters', u'{"items":[%s]}' % brand)
+    check('override of the last export', ('"source":"pset-mapping-file"' in body, '"configuration":"WB Missing File"' in body), (True, True))
+    status, body, response = post('/resolve-parameters', u'{"configuration":"WB Test Setup","items":[%s]}' % brand)
+    check('another setup drops the last override', ('"configuration":"WB Test Setup"' in body, 'psets.txt"]' in body), (True, True))
+
+    # the files a setup exports with, and the folder listing for the override dropdown
+    status, body = get('/ifc-configuration-files?name=WB%20Missing%20File')
+    log('configuration files ->', status, body)
+    check('setup files', (status, '"psetFileExists":false' in body, 'does-not-exist.txt' in body, 'The setup' in body), (200, True, True, True))
+    status, body = get('/ifc-configuration-files?name=No%20Such%20Setup')
+    check('unknown setup -> 404', status, 404)
+    status, body = get('/pset-files?dir=' + System.Uri.EscapeDataString(OUT))
+    log('pset files ->', status, body)
+    check('folder listing', (status, '"name":"psets.txt"' in body, '"modified":"' in body), (200, True, True))
+    status, body = get('/pset-files?dir=' + System.Uri.EscapeDataString(os.path.join(OUT, 'no-such-folder')))
+    check('missing folder -> 400', status, 400)
+    status, body = get('/pset-files')
+    check('no folder -> 400', status, 400)
+
+    # an override file that does not exist fails the export before Revit is asked to export
+    status, body, response = post('/export-ifc', u'{"configuration":"WB Test Setup","psetFile":%s}' % json.dumps(os.path.join(OUT, u'saknas åäö.txt')))
+    job = json.loads(body)['jobId'] if status == 200 else None
+    status, body = get('/export-status/%s' % job)
+    log('export with a missing override ->', status, body)
+    # System.Text.Json escapes non-ASCII, so only the ASCII part of the name is looked for
+    check('missing override fails the job', ('"status":"failed"' in body, 'saknas ' in body, 'Nothing was exported' in body), (True, True, True))
 
     # two overlapping requests keep their own results
     del transactions[:]
@@ -172,7 +213,7 @@ try:
     done = pump(status_task, 60)
     status_body = status_task.Result.Content.ReadAsStringAsync().Result if done else 'timed out'
     log('status after %.0fs ->' % (time.time() - started), status_body)
-    check('status reports the writeback capability', '"capabilities":["writeback"]' in status_body, True)
+    check('status reports its capabilities', '"capabilities":["writeback","export-overrides"]' in status_body, True)
     check('status keeps its other fields', ('"connected":true' in status_body, '"version":"1.4.0"' in status_body, '"configsReady":' in status_body), (True, True, True))
 
     uiapp.Application.DocumentChanged -= on_changed

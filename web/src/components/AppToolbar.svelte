@@ -5,7 +5,8 @@
     import { error, success, idsValidationError } from "$src/modules/utils/toast.svelte";
     import { ChevronRightIcon, LinkIcon, XIcon } from "@lucide/svelte";
     import { Bonsai, connect, disconnect, runAudit as runBonsaiAudit } from "$src/modules/api/bonsai.svelte";
-    import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportAndAudit } from "$src/modules/api/revit.svelte.js";
+    import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportAndAudit, EXPORT_OVERRIDES, overrideLabel } from "$src/modules/api/revit.svelte.js";
+    import ExportFileOverrides from "$src/components/ExportFileOverrides.svelte";
     import { ArchiCAD, connect as connectArchiCAD, disconnect as disconnectArchiCAD, runAudit as runArchiCADAudit, getIfcConfigurations as getArchiCADIfcConfigurations, exportIfc as exportArchiCADIfc } from "$src/modules/api/archicad.svelte.js";
     import { onMount } from 'svelte';
     import type { AuditReport } from "$src/types/report";
@@ -413,6 +414,9 @@
                                     <div class="model-meta">
                                         <span class="model-size">{formatFileSize(model.fileSize)}</span>
                                     </div>
+                                    {#if overrideLabel([model])}
+                                        <div class="override-label">{overrideLabel([model])}</div>
+                                    {/if}
                                 </div>
                                 <button class="unload-btn" onclick={() => handleUnloadModel(model.id)} title="Unload model" aria-label="Unload model">
                                     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -625,7 +629,10 @@
                                                 <option value={config}>{config}</option>
                                             {/each}
                                         </select>
-                                        <button 
+                                        {#if Revit.capabilities.includes(EXPORT_OVERRIDES) && selectedIfcConfig}
+                                            <ExportFileOverrides configuration={selectedIfcConfig} disabled={isExportingIfc || Revit.exporting} />
+                                        {/if}
+                                        <button
                                             class="export-btn"
                                             onclick={handleExportIfc}
                                             disabled={isExportingIfc || Revit.exporting || !selectedIfcConfig}
@@ -669,6 +676,9 @@
                                                 <div class="model-meta">
                                                     <span class="model-size">{formatFileSize(model.fileSize)}</span>
                                                 </div>
+                                                {#if overrideLabel([model])}
+                                                    <div class="override-label">{overrideLabel([model])}</div>
+                                                {/if}
                                             </div>
                                             <button class="unload-btn" onclick={() => handleUnloadModel(model.id)} title="Unload model" aria-label="Unload model">
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -818,6 +828,9 @@
                                                 <div class="model-meta">
                                                     <span class="model-size">{formatFileSize(model.fileSize)}</span>
                                                 </div>
+                                                {#if overrideLabel([model])}
+                                                    <div class="override-label">{overrideLabel([model])}</div>
+                                                {/if}
                                             </div>
                                             <button class="unload-btn" onclick={() => handleUnloadModel(model.id)} title="Unload model" aria-label="Unload model">
                                                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -1022,6 +1035,11 @@
         gap: 0.75rem;
         font-size: 0.75rem;
         color: #6b7280;
+    }
+
+    .override-label {
+        font-size: 0.75rem;
+        color: #fbbf24;
     }
     
     .unload-btn {

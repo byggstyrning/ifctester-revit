@@ -540,11 +540,29 @@ public class GetIfcConfigurationsEventHandler : IExternalEventHandler
 public class ExportIfcEventHandler : IExternalEventHandler
 {
     public string ConfigurationName { get; set; } = string.Empty;
+
+    /// <summary>Optional: a user-defined property set file that replaces the setup's, on the temporary copy only.</summary>
+    public string? PsetFileOverride { get; set; }
+
+    /// <summary>Optional: a parameter mapping table that replaces the setup's, on the temporary copy only.</summary>
+    public string? ParameterMappingFileOverride { get; set; }
+
     public string? OutputFilePath { get; set; }
+
+    /// <summary>The files the export read, when the setup was found through the exporter's configurations.</summary>
+    public Writeback.ExportFileSelection? Files { get; private set; }
+
+    /// <summary>Why the export failed, when it did.</summary>
+    public string? ErrorMessage { get; private set; }
+
     public TaskCompletionSource<bool>? CompletionSource { get; set; }
 
     public void Execute(UIApplication app)
     {
+        Files = null;
+        ErrorMessage = null;
+        var hasOverrides = !string.IsNullOrWhiteSpace(PsetFileOverride) || !string.IsNullOrWhiteSpace(ParameterMappingFileOverride);
+        var overridesApplied = false;
         try
         {
             // Create temporary file path - ALWAYS set this first
@@ -615,30 +633,13 @@ public class ExportIfcEventHandler : IExternalEventHandler
                             
                             if (selectedConfig != null)
                             {
-                                // Duplicate the configuration
-                                var duplicateMethod = selectedConfig.GetType().GetMethod("Duplicate", new[] { typeof(string) });
-                                object? duplicatedConfig = null;
-                                
-                                if (duplicateMethod != null)
-                                {
-                                    // Duplicate method requires a name parameter
-                                    duplicatedConfig = duplicateMethod.Invoke(selectedConfig, new object[] { "TempExportConfig" });
-                                }
-                                else
-                                {
-                                    // Try parameterless version as fallback
-                                    var duplicateMethodNoParams = selectedConfig.GetType().GetMethod("Duplicate", Type.EmptyTypes);
-                                    if (duplicateMethodNoParams != null)
-                                    {
-                                        duplicatedConfig = duplicateMethodNoParams.Invoke(selectedConfig, null);
-                                    }
-                                    else
-                                    {
-                                        // If no Duplicate method exists, use the config directly
-                                        duplicatedConfig = selectedConfig;
-                                    }
-                                }
-                                
+                                // Work on a copy so the setup itself is never changed. The copy keeps the
+                                // setup's name: UpdateOptions passes it on as ConfigName, and the exporter
+                                // looks for a missing property set file as <ConfigName>.txt.
+                                var setupName = selectedConfig.GetType().GetProperty("Name")?.GetValue(selectedConfig) as string;
+                                if (string.IsNullOrEmpty(setupName)) setupName = ConfigurationName;
+                                var duplicatedConfig = DuplicateConfiguration(selectedConfig, setupName!, out var isCopy);
+
                                 if (duplicatedConfig != null)
                                 {
                                     // Set VisibleElementsOfCurrentView to true
@@ -647,7 +648,20 @@ public class ExportIfcEventHandler : IExternalEventHandler
                                     {
                                         visibleProperty.SetValue(duplicatedConfig, true);
                                     }
-                                    
+
+                                    // What the export reads; the setup's own values, before the overrides go on the copy
+                                    Files = Writeback.ExportMapping.DescribeFiles(selectedConfig, setupName!, PsetFileOverride, ParameterMappingFileOverride);
+
+                                    if (hasOverrides)
+                                    {
+                                        if (!isCopy)
+                                        {
+                                            throw new InvalidOperationException("The IFC exporter could not copy the setup, so the file overrides were not applied. The setup itself is never changed.");
+                                        }
+                                        ApplyFileOverrides(duplicatedConfig);
+                                        overridesApplied = true;
+                                    }
+
                                     // Update options with the view
                                     var updateOptionsMethod = duplicatedConfig.GetType().GetMethod("UpdateOptions", new[] { typeof(IFCExportOptions), typeof(ElementId) });
                                     if (updateOptionsMethod != null)
@@ -665,8 +679,19 @@ public class ExportIfcEventHandler : IExternalEventHandler
             catch (Exception configEx)
             {
                 System.Diagnostics.Debug.WriteLine($"Error retrieving configuration '{ConfigurationName}': {configEx.Message}");
+                if (hasOverrides && configEx is not InvalidOperationException)
+                {
+                    throw new InvalidOperationException($"The IFC export setup '{ConfigurationName}' could not be read, so the file overrides could not be applied: {(configEx.InnerException ?? configEx).Message}", configEx);
+                }
+                if (hasOverrides) throw;
             }
-            
+
+            // The fallbacks below cannot take file overrides; exporting without them would be a silent lie
+            if (hasOverrides && !overridesApplied)
+            {
+                throw new InvalidOperationException($"The IFC export setup '{ConfigurationName}' was not found among the IFC exporter's setups, so the property set file overrides could not be applied.");
+            }
+
             // Fallback: Try IFCExportOptionsManager
             if (options == null)
             {
@@ -956,8 +981,81 @@ public class ExportIfcEventHandler : IExternalEventHandler
             {
                 System.Diagnostics.Debug.WriteLine($"Inner exception: {ex.InnerException.Message}\n{ex.InnerException.StackTrace}");
             }
+            ErrorMessage = ex is TargetInvocationException && ex.InnerException != null ? ex.InnerException.Message : ex.Message;
             CompletionSource?.SetResult(false);
         }
+    }
+
+    /// <summary>
+    /// Copies an exporter setup. The exporter's method is Duplicate(string newName, bool
+    /// makeEditable = false); an optional parameter keeps GetMethod(name, [string]) from finding
+    /// it, so the parameters are matched here. Falls back to Clone(), then to the setup itself.
+    /// </summary>
+    private static object? DuplicateConfiguration(object configuration, string name, out bool isCopy)
+    {
+        var type = configuration.GetType();
+        var duplicate = type.GetMethods(BindingFlags.Public | BindingFlags.Instance)
+            .Where(m => m.Name == "Duplicate")
+            .Select(m => (Method: m, Parameters: m.GetParameters()))
+            .FirstOrDefault(m => m.Parameters.Length >= 1 && m.Parameters[0].ParameterType == typeof(string) && m.Parameters.Skip(1).All(p => p.HasDefaultValue));
+        try
+        {
+            if (duplicate.Method != null)
+            {
+                var arguments = new object?[duplicate.Parameters.Length];
+                arguments[0] = name;
+                for (var i = 1; i < arguments.Length; i++) arguments[i] = duplicate.Parameters[i].DefaultValue;
+                var copy = duplicate.Method.Invoke(configuration, arguments);
+                if (copy != null && !ReferenceEquals(copy, configuration))
+                {
+                    isCopy = true;
+                    return copy;
+                }
+            }
+
+            var clone = type.GetMethod("Clone", Type.EmptyTypes) ?? type.GetMethod("Duplicate", Type.EmptyTypes);
+            if (clone?.Invoke(configuration, null) is { } cloned && !ReferenceEquals(cloned, configuration))
+            {
+                isCopy = true;
+                return cloned;
+            }
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"Could not copy the IFC export setup: {ex.Message}");
+        }
+
+        System.Diagnostics.Debug.WriteLine("The IFC export setup could not be copied; exporting with the setup itself");
+        isCopy = false;
+        return configuration;
+    }
+
+    /// <summary>Puts the override files on the copied setup. Throws when the exporter offers no way to.</summary>
+    private void ApplyFileOverrides(object copy)
+    {
+        if (!string.IsNullOrWhiteSpace(PsetFileOverride))
+        {
+            SetOverride(copy, "ExportUserDefinedPsets", true);
+            SetOverride(copy, "ExportUserDefinedPsetsFileName", PsetFileOverride!.Trim());
+        }
+        if (!string.IsNullOrWhiteSpace(ParameterMappingFileOverride))
+        {
+            SetOverride(copy, "ExportUserDefinedParameterMapping", true);
+            SetOverride(copy, "ExportUserDefinedParameterMappingFileName", ParameterMappingFileOverride!.Trim());
+        }
+    }
+
+    private static void SetOverride(object configuration, string propertyName, object value)
+    {
+        var property = configuration.GetType().GetProperty(propertyName);
+        if (property == null || !property.CanWrite || !property.PropertyType.IsInstanceOfType(value))
+        {
+            var problem = property == null ? "has no property" : "cannot set the property";
+            System.Diagnostics.Debug.WriteLine($"ExportIfcEventHandler: the IFC exporter's setup {problem} {propertyName}");
+            throw new InvalidOperationException($"This version of the IFC exporter {problem} {propertyName}, so the file override could not be applied.");
+        }
+        property.SetValue(configuration, value);
+        System.Diagnostics.Debug.WriteLine($"ExportIfcEventHandler: override {propertyName} = {value}");
     }
 
     public string GetName() => "ExportIfc";
@@ -989,8 +1087,8 @@ public class RevitApiServer : IDisposable
     // Write-back (POST /resolve-parameters, POST /apply-changes): one queued external event
     private readonly Writeback.RevitWorkQueue _writebackQueue = new();
     private readonly Writeback.WritebackEndpoints _writeback;
-    // The IFC export setup of the last export, which is the one the audited IFC came from
-    private volatile string? _lastExportConfiguration;
+    // The IFC export setup and file overrides of the last export, which is the one the audited IFC came from
+    private volatile Writeback.ExportRequestSettings? _lastExport;
     
     // Export job tracking for async polling
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ExportJob> _exportJobs = new();
@@ -1015,6 +1113,7 @@ public class RevitApiServer : IDisposable
         public ExportJobStatus Status { get; set; } = ExportJobStatus.Running;
         public string? OutputFilePath { get; set; }
         public string? ErrorMessage { get; set; }
+        public Writeback.ExportFileSelection? Files { get; set; }
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
@@ -1022,7 +1121,7 @@ public class RevitApiServer : IDisposable
     {
         _port = port;
         _baseUrl = $"http://localhost:{port}/";
-        _writeback = new Writeback.WritebackEndpoints(_writebackQueue, () => _lastExportConfiguration);
+        _writeback = new Writeback.WritebackEndpoints(_writebackQueue, () => _lastExport);
     }
 
     public bool IsRunning => _isRunning;
@@ -1164,6 +1263,14 @@ public class RevitApiServer : IDisposable
             {
                 await HandleGetIfcConfigurations(response);
             }
+            else if (path == "/ifc-configuration-files" && method == "GET")
+            {
+                await HandleIfcConfigurationFiles(response, request.QueryString["name"]);
+            }
+            else if (path == "/pset-files" && method == "GET")
+            {
+                await HandlePsetFiles(response, request.QueryString["dir"]);
+            }
             else if (path == "/export-ifc" && method == "POST")
             {
                 await HandleExportIfc(request, response);
@@ -1295,7 +1402,7 @@ public class RevitApiServer : IDisposable
             connected = true,
             configsReady = configsReady,
             version = "1.4.0",
-            capabilities = new[] { "writeback" }
+            capabilities = new[] { "writeback", "export-overrides" }
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(status);
@@ -1463,20 +1570,29 @@ public class RevitApiServer : IDisposable
 
         try
         {
-            // Read request body
-            using var reader = new StreamReader(request.InputStream, request.ContentEncoding);
+            // Read request body; JSON is UTF-8, and override paths may well hold å, ä or ö
+            using var reader = new StreamReader(request.InputStream, Encoding.UTF8);
             var body = await reader.ReadToEndAsync();
-            
-            var requestData = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, string>>(body);
-            if (requestData == null || !requestData.ContainsKey("configuration"))
+
+            Writeback.ExportIfcRequest? requestData;
+            try
+            {
+                requestData = Writeback.WritebackJson.Deserialize<Writeback.ExportIfcRequest>(body);
+            }
+            catch (System.Text.Json.JsonException ex)
+            {
+                await SendError(response, 400, $"Invalid JSON body: {ex.Message}");
+                return;
+            }
+            if (requestData == null || string.IsNullOrWhiteSpace(requestData.Configuration))
             {
                 await SendError(response, 400, "Missing 'configuration' parameter");
                 return;
             }
 
-            var configName = requestData["configuration"];
-            _lastExportConfiguration = configName;
-            
+            var configName = requestData.Configuration!;
+            var settings = new Writeback.ExportRequestSettings(configName, requestData.PsetFile, requestData.ParameterMappingFile);
+
             // Generate unique job ID and create job entry
             var jobId = Guid.NewGuid().ToString();
             var job = new ExportJob
@@ -1486,42 +1602,23 @@ public class RevitApiServer : IDisposable
                 Status = ExportJobStatus.Running
             };
             _exportJobs[jobId] = job;
-            
-            // Start export asynchronously (fire and forget with job tracking)
-            _ = Task.Run(async () =>
-            {
-                try
-                {
-                    var tcs = new TaskCompletionSource<bool>();
-                    _eventHandlerExportIfc.ConfigurationName = configName;
-                    _eventHandlerExportIfc.CompletionSource = tcs;
-                    _externalEventExportIfc.Raise();
 
-                    // Wait for export to complete (no timeout since we're polling)
-                    var success = await tcs.Task;
-                    
-                    if (success && !string.IsNullOrEmpty(_eventHandlerExportIfc.OutputFilePath) && 
-                        File.Exists(_eventHandlerExportIfc.OutputFilePath))
-                    {
-                        job.Status = ExportJobStatus.Complete;
-                        job.OutputFilePath = _eventHandlerExportIfc.OutputFilePath;
-                        System.Diagnostics.Debug.WriteLine($"Export job {jobId} completed: {job.OutputFilePath}");
-                    }
-                    else
-                    {
-                        job.Status = ExportJobStatus.Failed;
-                        job.ErrorMessage = "IFC export failed or file was not created";
-                        System.Diagnostics.Debug.WriteLine($"Export job {jobId} failed");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    job.Status = ExportJobStatus.Failed;
-                    job.ErrorMessage = ex.Message;
-                    System.Diagnostics.Debug.WriteLine($"Export job {jobId} exception: {ex.Message}");
-                }
-            });
-            
+            // An override that does not exist fails the job: exporting without it would pass for a real export
+            var missing = new[] { (File: settings.PsetFile, What: "property set file"), (File: settings.ParameterMappingFile, What: "parameter mapping table") }
+                .Where(o => o.File != null && !File.Exists(o.File))
+                .Select(o => $"The {o.What} override was not found: {o.File}.")
+                .ToList();
+            if (missing.Count > 0)
+            {
+                job.Status = ExportJobStatus.Failed;
+                job.ErrorMessage = string.Join(" ", missing) + " Nothing was exported.";
+            }
+            else
+            {
+                _lastExport = settings;
+                StartExport(job, settings);
+            }
+
             // Return immediately with job ID
             var result = new { jobId = jobId, status = "running" };
             var json = System.Text.Json.JsonSerializer.Serialize(result);
@@ -1538,6 +1635,140 @@ public class RevitApiServer : IDisposable
         }
     }
     
+    // Runs the export on the Revit thread and records the outcome on the job, which the page polls
+    private void StartExport(ExportJob job, Writeback.ExportRequestSettings settings)
+    {
+        var handler = _eventHandlerExportIfc!;
+        var externalEvent = _externalEventExportIfc!;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var tcs = new TaskCompletionSource<bool>();
+                handler.ConfigurationName = job.ConfigurationName;
+                handler.PsetFileOverride = settings.PsetFile;
+                handler.ParameterMappingFileOverride = settings.ParameterMappingFile;
+                handler.CompletionSource = tcs;
+                externalEvent.Raise();
+
+                // Wait for export to complete (no timeout since we're polling)
+                var success = await tcs.Task;
+                job.Files = handler.Files;
+
+                if (success && !string.IsNullOrEmpty(handler.OutputFilePath) &&
+                    File.Exists(handler.OutputFilePath))
+                {
+                    job.OutputFilePath = handler.OutputFilePath;
+                    job.Status = ExportJobStatus.Complete;
+                    System.Diagnostics.Debug.WriteLine($"Export job {job.JobId} completed: {job.OutputFilePath}");
+                }
+                else
+                {
+                    job.ErrorMessage = handler.ErrorMessage ?? "IFC export failed or file was not created";
+                    job.Status = ExportJobStatus.Failed;
+                    System.Diagnostics.Debug.WriteLine($"Export job {job.JobId} failed: {job.ErrorMessage}");
+                }
+            }
+            catch (Exception ex)
+            {
+                job.ErrorMessage = ex.Message;
+                job.Status = ExportJobStatus.Failed;
+                System.Diagnostics.Debug.WriteLine($"Export job {job.JobId} exception: {ex.Message}");
+            }
+        });
+    }
+
+    /// <summary>GET /ifc-configuration-files?name=: the files a setup exports with, so the page can show its default.</summary>
+    private async Task HandleIfcConfigurationFiles(HttpListenerResponse response, string? name)
+    {
+        if (_uiApplication == null)
+        {
+            await SendError(response, 503, "Revit application not available");
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            await SendError(response, 400, "Missing 'name' parameter");
+            return;
+        }
+
+        Writeback.ExportFileSelection? files;
+        try
+        {
+            // The setups are read on the Revit thread, through the same queue as write-back
+            files = await _writebackQueue.Run(app =>
+            {
+                var document = app.ActiveUIDocument?.Document;
+                return document == null ? null : Writeback.ExportMapping.DescribeFiles(document, name!);
+            }, TimeSpan.FromSeconds(30));
+        }
+        catch (Writeback.RevitBusyException ex)
+        {
+            await SendError(response, 503, ex.Message);
+            return;
+        }
+        catch (Exception ex)
+        {
+            await SendError(response, 500, $"Could not read the IFC export setup: {ex.Message}");
+            return;
+        }
+
+        if (files == null)
+        {
+            await SendError(response, 404, $"The IFC export setup '{name}' was not found among the IFC exporter's setups");
+            return;
+        }
+        await SendJson(response, Writeback.WritebackJson.Serialize(files));
+    }
+
+    /// <summary>GET /pset-files?dir=: the *.txt files directly in a folder. Read-only.</summary>
+    private async Task HandlePsetFiles(HttpListenerResponse response, string? dir)
+    {
+        if (string.IsNullOrWhiteSpace(dir))
+        {
+            await SendError(response, 400, "Missing 'dir' parameter");
+            return;
+        }
+
+        // An unreachable network share can take a long time to fail
+        var listing = Task.Run(() =>
+        {
+            if (!Directory.Exists(dir)) return null;
+            return new DirectoryInfo(dir!).GetFiles("*.txt", SearchOption.TopDirectoryOnly)
+                .OrderBy(f => f.Name, StringComparer.OrdinalIgnoreCase)
+                .Select(f => new Writeback.PsetFileEntry
+                {
+                    Name = f.Name,
+                    Path = f.FullName,
+                    Modified = f.LastWriteTimeUtc.ToString("yyyy-MM-ddTHH:mm:ssZ", System.Globalization.CultureInfo.InvariantCulture)
+                })
+                .ToList();
+        });
+
+        List<Writeback.PsetFileEntry>? files;
+        try
+        {
+            if (await Task.WhenAny(listing, Task.Delay(TimeSpan.FromSeconds(20))) != listing)
+            {
+                await SendError(response, 504, $"The folder did not answer in time: {dir}");
+                return;
+            }
+            files = await listing;
+        }
+        catch (Exception ex)
+        {
+            await SendError(response, 400, $"The folder could not be read: {ex.Message}");
+            return;
+        }
+
+        if (files == null)
+        {
+            await SendError(response, 400, $"The folder was not found: {dir}");
+            return;
+        }
+        await SendJson(response, Writeback.WritebackJson.Serialize(new { files }));
+    }
+
     private async Task HandleWriteback(HttpListenerRequest request, HttpListenerResponse response, Func<string, Task<Writeback.WritebackHttpResult>> handler)
     {
         if (_uiApplication == null)
@@ -1574,17 +1805,19 @@ public class RevitApiServer : IDisposable
             _ => "unknown"
         };
         
+        // exportFiles: the property set file and mapping table the export read. Null while it runs,
+        // and when the setup was not found through the IFC exporter's setups.
         object result;
         if (job.Status == ExportJobStatus.Failed)
         {
-            result = new { jobId = job.JobId, status = statusStr, error = job.ErrorMessage ?? "Unknown error" };
+            result = new { jobId = job.JobId, status = statusStr, error = job.ErrorMessage ?? "Unknown error", exportFiles = job.Files, warning = job.Files?.Warning };
         }
         else
         {
-            result = new { jobId = job.JobId, status = statusStr };
+            result = new { jobId = job.JobId, status = statusStr, exportFiles = job.Files, warning = job.Files?.Warning };
         }
-        
-        var json = System.Text.Json.JsonSerializer.Serialize(result);
+
+        var json = Writeback.WritebackJson.Serialize(result);
         response.StatusCode = 200;
         response.ContentType = "application/json";
         var buffer = Encoding.UTF8.GetBytes(json);

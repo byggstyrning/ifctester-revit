@@ -331,6 +331,10 @@ try:
         lost = ExportMapping.Load(doc, 'WB Missing File')
         check('Load saved setup with a missing pset file', (list(lost.Files), lost.Note is not None), ([], True))
         log('   note:', lost.Note)
+        found = ExportMapping.Load(doc, 'WB Missing File', psets, None)
+        check('Load with a pset file override', (list(found.Files), found.Note, found.Mapping.Entries.Count), ([psets], None, 3))
+        described = ExportMapping.DescribeFiles(doc, 'WB Missing File')
+        check('DescribeFiles of a setup with a missing file', (described.PsetFileExists, described.PsetFileIsOverride, described.Warning is not None), (False, False, True))
     except Exception:
         fails.append('saved setup')
         log('FAIL saved setup:', traceback.format_exc())

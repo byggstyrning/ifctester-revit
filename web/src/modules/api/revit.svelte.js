@@ -12,8 +12,41 @@ import hyperid from 'hyperid';
  * @property {boolean} loading
  * @property {string[]} capabilities - Optional features the connected add-in reports in /status (e.g. "writeback")
  * @property {string} exportConfiguration - IFC export configuration last selected in the toolbar
+ * @property {ExportOverrides} exportOverrides - Files chosen on the page that replace the setup's own for the next export
+ * @property {LastExport | null} lastExport - What the last export from this page read, as the add-in reported it
  * @property {boolean} exporting
  */
+
+/**
+ * @typedef {Object} ExportOverrides
+ * @property {string} psetFile - User-defined property set file; empty uses the setup's own
+ * @property {string} parameterMappingFile - Parameter mapping table; empty uses the setup's own
+ */
+
+/**
+ * The files an export reads: GET /export-status and GET /ifc-configuration-files.
+ * @typedef {Object} ExportFiles
+ * @property {string | null} psetFile
+ * @property {boolean} psetFileExists
+ * @property {boolean} psetFileIsOverride
+ * @property {string | null} parameterMappingFile
+ * @property {boolean} parameterMappingFileExists
+ * @property {boolean} parameterMappingFileIsOverride
+ * @property {string | null} warning
+ */
+
+/**
+ * @typedef {Object} LastExport
+ * @property {string} configuration
+ * @property {string | null} fileName - The exported IFC as loaded on the page
+ * @property {string} psetFile - The property set file override sent with the export, or ''
+ * @property {string} parameterMappingFile - The mapping table override sent with the export, or ''
+ * @property {ExportFiles | null} files - What the add-in reports it read; null from add-ins without "export-overrides"
+ * @property {string | null} warning
+ */
+
+/** The add-in can take property set file overrides with an export (GET /status capabilities). */
+export const EXPORT_OVERRIDES = 'export-overrides';
 
 // Revit connection state
 /** @type {RevitState} */
@@ -25,8 +58,32 @@ export const Revit = $state({
     loading: false,
     capabilities: [],
     exportConfiguration: '',
+    exportOverrides: { psetFile: '', parameterMappingFile: '' },
+    lastExport: null,
     exporting: false
 });
+
+/**
+ * The base name of a Windows or UNC path.
+ * @param {string | null | undefined} path
+ */
+export const fileNameOf = (path) => (path ? String(path).split(/[\\/]/).pop() || String(path) : '');
+
+/**
+ * "Pset override: <file>" when the loaded model came from an export whose property set file or
+ * mapping table was replaced on the page, so nobody mistakes it for the delivery export.
+ * Empty when no loaded model is such an export.
+ * @param {{ fileName: string }[]} models - The loaded models
+ * @returns {string}
+ */
+export const overrideLabel = (models) => {
+    const last = Revit.lastExport;
+    if (!last?.fileName || !models.some((model) => model.fileName === last.fileName)) return '';
+    return [
+        last.psetFile ? `Pset override: ${fileNameOf(last.psetFile)}` : '',
+        last.parameterMappingFile ? `Mapping table override: ${fileNameOf(last.parameterMappingFile)}` : ''
+    ].filter(Boolean).join(' · ');
+};
 
 const id = hyperid();
 const pendingAudits = new Map();
@@ -302,11 +359,58 @@ export const getIfcConfigurations = async () => {
 };
 
 /**
+ * GET with a timeout; throws the add-in's error message on a non-2xx answer.
+ * @param {string} path
+ * @param {number} timeout
+ */
+const getJson = async (path, timeout) => {
+    if (!Revit.apiUrl || !Revit.connected) {
+        throw new Error('Not connected to Revit');
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(`${Revit.apiUrl}${path}`, { method: 'GET', mode: 'cors', signal: controller.signal });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+            throw new Error(data?.error || `HTTP ${response.status}: ${response.statusText}`);
+        }
+        return data;
+    } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+            throw new Error('Revit did not answer in time');
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
+/**
+ * The property set file and mapping table a setup exports with, so the page can show its default.
+ * @param {string} configurationName
+ * @returns {Promise<ExportFiles>}
+ */
+export const getIfcConfigurationFiles = (configurationName) =>
+    getJson(`/ifc-configuration-files?name=${encodeURIComponent(configurationName)}`, 35000);
+
+/**
+ * The *.txt files directly in a folder, as the add-in sees it.
+ * @param {string} dir
+ * @returns {Promise<{ name: string, path: string, modified: string }[]>}
+ */
+export const listPsetFiles = async (dir) => {
+    const data = await getJson(`/pset-files?dir=${encodeURIComponent(dir)}`, 25000);
+    return Array.isArray(data?.files) ? data.files : [];
+};
+
+/**
  * Export active view as IFC from Revit using async polling pattern
  * @param {string} configurationName - Name of the IFC export configuration to use
+ * @param {Partial<ExportOverrides>} [overrides] - Files that replace the setup's own; empty ones are not sent
  * @returns {Promise<File|null>} Returns the exported IFC file, or null if failed
  */
-export const exportIfc = async (configurationName) => {
+export const exportIfc = async (configurationName, overrides = {}) => {
     if (!Revit.apiUrl || !Revit.connected) {
         error('Not connected to Revit');
         return null;
@@ -317,6 +421,12 @@ export const exportIfc = async (configurationName) => {
         return null;
     }
     
+    const psetFile = overrides.psetFile?.trim() ?? '';
+    const parameterMappingFile = overrides.parameterMappingFile?.trim() ?? '';
+    /** @type {LastExport} */
+    const record = { configuration: configurationName, fileName: null, psetFile, parameterMappingFile, files: null, warning: null };
+    Revit.lastExport = null;
+
     try {
         // Step 1: Start the export and get job ID
         const startUrl = `${Revit.apiUrl}/export-ifc`;
@@ -327,7 +437,11 @@ export const exportIfc = async (configurationName) => {
             headers: {
                 'Content-Type': 'application/json'
             },
-            body: JSON.stringify({ configuration: configurationName })
+            body: JSON.stringify({
+                configuration: configurationName,
+                ...(psetFile ? { psetFile } : {}),
+                ...(parameterMappingFile ? { parameterMappingFile } : {})
+            })
         });
         
         if (!startResponse.ok) {
@@ -365,11 +479,15 @@ export const exportIfc = async (configurationName) => {
             }
             
             const statusData = await statusResponse.json();
+            // Add-ins with "export-overrides" report which property set file the export read
+            if (statusData.exportFiles) record.files = statusData.exportFiles;
+            if (typeof statusData.warning === 'string' && statusData.warning) record.warning = statusData.warning;
             
             if (statusData.status === 'complete') {
                 console.log(`Revit export completed after ${pollCount} polls`);
                 break;
             } else if (statusData.status === 'failed') {
+                Revit.lastExport = { ...record, warning: statusData.error || record.warning };
                 throw new Error(statusData.error || 'Export failed');
             }
             // status === 'running', continue polling
@@ -406,6 +524,8 @@ export const exportIfc = async (configurationName) => {
         
         // Create a File object from the blob
         const file = new File([blob], fileName, { type: 'application/octet-stream' });
+        record.fileName = fileName;
+        Revit.lastExport = record;
         
         success(`IFC exported successfully: ${fileName}`);
         return file;
@@ -439,7 +559,9 @@ export const exportAndAudit = async (configurationName) => {
         // Clear all existing models before loading the new export
         await clearAllModels();
 
-        const exportedFile = await exportIfc(configurationName);
+        // Overrides only go to an add-in that can apply them; an older one would ignore them silently
+        const overrides = Revit.capabilities.includes(EXPORT_OVERRIDES) ? Revit.exportOverrides : {};
+        const exportedFile = await exportIfc(configurationName, overrides);
         if (!exportedFile) {
             return false;
         }

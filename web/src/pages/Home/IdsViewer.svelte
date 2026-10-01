@@ -1,10 +1,10 @@
 <script lang="ts">
     import * as IDS from "$src/modules/api/ids.svelte";
-    import { getAuditReportById, downloadAuditReport } from "$src/modules/api/api.svelte";
+    import { IFCModels, getAuditReportById, downloadAuditReport } from "$src/modules/api/api.svelte";
     import { error, success } from "$src/modules/utils/toast.svelte";
     import * as Tooltip from "$src/lib/components/ui/tooltip";
     import * as CopyableText from "$src/lib/components/ui/copyable-text";
-    import { Revit, selectElement as selectElementRevit } from "$src/modules/api/revit.svelte.js";
+    import { Revit, overrideLabel, selectElement as selectElementRevit } from "$src/modules/api/revit.svelte.js";
     import { ArchiCAD, selectElement as selectElementArchiCAD } from "$src/modules/api/archicad.svelte.js";
     import * as Writeback from "$src/modules/api/writeback.svelte";
     import FixCell from "$src/components/writeback/FixCell.svelte";
@@ -22,6 +22,8 @@
     let auditReport = $derived(
         documentState?.auditReport ? (getAuditReportById(documentState.auditReport) as AuditReport | undefined) : null
     );
+    // An audit of an export whose property set file was replaced on the page says so
+    let auditOverrideLabel = $derived(overrideLabel(IFCModels.models));
     let expandedSpecs = $state(new Set<number>());
     let expandedRequirements = $state(new Set<string>());
     let allExpanded = $state(false);
@@ -273,6 +275,10 @@
                     <div class="progress-fill" style="width: {auditReport.data.percent_checks_pass}%"></div>
                 </div>
             </div>
+        {/if}
+
+        {#if auditReport && auditOverrideLabel}
+            <p class="override-note" role="note">{auditOverrideLabel}. Not the delivery export.</p>
         {/if}
 
         {#if writebackAvailable}
@@ -864,6 +870,15 @@
         font-size: 16px;
         line-height: 1.5;
         color: #d0d0d0;
+    }
+
+    .override-note {
+        margin: 0;
+        padding: 6px 10px;
+        border-left: 3px solid #f59e0b;
+        background: #f59e0b1a;
+        color: #fbbf24;
+        font-size: 13px;
     }
 
     .specifications-viewer {

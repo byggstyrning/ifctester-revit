@@ -15,6 +15,14 @@ public sealed class ResolveRequest
     /// the setup of the last export it ran.
     /// </summary>
     public string? Configuration { get; set; }
+
+    /// <summary>
+    /// Optional: the user-defined property set file and parameter mapping table the export was
+    /// made with, when they replaced the setup's own. Without them the server uses the overrides
+    /// of its last export, if that export used the same setup.
+    /// </summary>
+    public string? PsetFile { get; set; }
+    public string? ParameterMappingFile { get; set; }
 }
 
 public sealed class ResolveItem

@@ -165,11 +165,16 @@ Both plugins expose a local HTTP API for communication with the web interface:
 | `/status` | GET | Check server status |
 | `/select-by-guid/{guid}` | GET | Select element by IFC GUID |
 | `/ifc-configurations` | GET | List IFC export configurations |
-| `/export-ifc` | POST | Export model to IFC |
+| `/export-ifc` | POST | Export model to IFC. Revit: optional `psetFile` / `parameterMappingFile` replace the setup's files for this export only |
+| `/export-status/{id}` | GET | Poll an export. Revit: also the property set file and mapping table it read (`exportFiles`) and a `warning` when the setup's file is missing |
+| `/ifc-configuration-files?name=` | GET | Revit only: the property set file and mapping table a setup names, and whether they exist |
+| `/pset-files?dir=` | GET | Revit only: the `*.txt` files in a folder, for the override dropdown. Read-only |
 | `/resolve-parameters` | POST | Revit only: find the parameters a failed IDS property or attribute could be fixed in |
 | `/apply-changes` | POST | Revit only: write fix values to those parameters in one transaction |
 
-The two write-back endpoints are described in [web/README.md](web/README.md#write-back).
+The write-back endpoints and the property set file override are described in
+[web/README.md](web/README.md#property-set-file-override). `GET /status` lists `capabilities` (`writeback`,
+`export-overrides`) so the page only shows controls the add-in supports.
 
 **Default Ports:**
 - Revit: `48881`

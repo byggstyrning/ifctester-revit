@@ -86,5 +86,41 @@ Check("resolve response json", WritebackJson.Serialize(new ResolveResponse { Ite
 Check("apply response json", WritebackJson.Serialize(new ApplyResponse { Applied = 1, Results = { new ChangeResult { Key = "k", Ok = true, NewValue = "EI60" } } }),
     """{"applied":1,"failed":0,"results":[{"key":"k","ok":true,"message":null,"newValue":"EI60"}]}""");
 
+// ExportFiles: which property set file and mapping table an export reads
+var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { @"C:\x\override.txt", @"C:\exp\H29.txt", @"C:\x\table.txt" };
+bool Exists(string path) => existing.Contains(path);
+var psetSetup = new ExportFileSettings { ExportUserDefinedPsets = true, UserDefinedPsetsFileName = @"P:\pset\Byggpartner.txt" };
+string Sel(ExportFileSelection s) => $"{s.PsetFile}|{s.PsetFileExists}|{s.PsetFileIsOverride}|{s.ParameterMappingFile}|{s.ParameterMappingFileExists}|{s.ParameterMappingFileIsOverride}";
+
+var missingSetupFile = ExportFiles.Select("Other", psetSetup, null, null, @"C:\exp", Exists);
+Check("setup file missing", Sel(missingSetupFile), @"P:\pset\Byggpartner.txt|False|False||False|False");
+Check("setup file missing warns", missingSetupFile.Warning, @"The setup's property set file was not found: P:\pset\Byggpartner.txt. The export has no user-defined property sets.");
+Check("exporter fallback <setup>.txt", Sel(ExportFiles.Select("H29", psetSetup, null, null, @"C:\exp", Exists)), @"C:\exp\H29.txt|True|False||False|False");
+Check("exporter fallback no warning", ExportFiles.Select("H29", psetSetup, null, null, @"C:\exp", Exists).Warning, null);
+var overridden = ExportFiles.Select("Other", psetSetup, @" C:\x\override.txt ", @"C:\x\table.txt", @"C:\exp", Exists);
+Check("override replaces missing setup file", Sel(overridden), @"C:\x\override.txt|True|True|C:\x\table.txt|True|True");
+Check("override no warning", overridden.Warning, null);
+Check("missing override warns", ExportFiles.Select("Other", psetSetup, @"C:\x\gone.txt", null, @"C:\exp", Exists).Warning, @"The property set file override was not found: C:\x\gone.txt.");
+Check("override on a setup without psets", Sel(ExportFiles.Select("Other", new ExportFileSettings(), @"C:\x\override.txt", null, @"C:\exp", Exists)), @"C:\x\override.txt|True|True||False|False");
+var noPsets = ExportFiles.Select("Other", new ExportFileSettings { UserDefinedPsetsFileName = @"P:\unused.txt" }, null, null, @"C:\exp", Exists);
+Check("psets off: no file, no warning", $"{Sel(noPsets)}|{noPsets.Warning}", "|False|False||False|False|");
+Check("table read without its checkbox", Sel(ExportFiles.Select("Other", new ExportFileSettings { ParameterMappingFileName = @"C:\x\table.txt" }, null, null, @"C:\exp", Exists)), @"|False|False|C:\x\table.txt|True|False");
+Check("missing table warns only when checked", ExportFiles.Select("Other", new ExportFileSettings { ExportUserDefinedParameterMapping = true, ParameterMappingFileName = @"P:\t.txt" }, null, null, @"C:\exp", Exists).Warning, @"The setup's parameter mapping table was not found: P:\t.txt.");
+Check("missing unchecked table is quiet", ExportFiles.Select("Other", new ExportFileSettings { ParameterMappingFileName = @"P:\t.txt" }, null, null, @"C:\exp", Exists).Warning, null);
+
+// ExportRequestSettings.ForResolve: the files a resolve reads
+var last = new ExportRequestSettings("H29", @"C:\x\override.txt", null);
+string Res(ExportRequestSettings s) => $"{s.Configuration}|{s.PsetFile}|{s.ParameterMappingFile}";
+Check("resolve: nothing named, last export used", Res(ExportRequestSettings.ForResolve(new ResolveRequest(), last)), @"H29|C:\x\override.txt|");
+Check("resolve: same setup keeps last override", Res(ExportRequestSettings.ForResolve(new ResolveRequest { Configuration = "H29" }, last)), @"H29|C:\x\override.txt|");
+Check("resolve: other setup drops last override", Res(ExportRequestSettings.ForResolve(new ResolveRequest { Configuration = "Other" }, last)), "Other||");
+Check("resolve: request override wins", Res(ExportRequestSettings.ForResolve(new ResolveRequest { Configuration = "H29", PsetFile = @"C:\y.txt", ParameterMappingFile = " " }, last)), @"H29|C:\y.txt|");
+Check("resolve: no last export", Res(ExportRequestSettings.ForResolve(new ResolveRequest { PsetFile = @"C:\y.txt" }, null)), @"|C:\y.txt|");
+Check("resolve request json", Res(ExportRequestSettings.ForResolve(WritebackJson.Deserialize<ResolveRequest>("""{ "items": [], "configuration": "H29", "psetFile": "\\\\srv\\pset\\Byggpartner åäö.txt", "parameterMappingFile": "" }""")!, null)), @"H29|\\srv\pset\Byggpartner åäö.txt|");
+var exportRequest = WritebackJson.Deserialize<ExportIfcRequest>("""{ "configuration": "H29", "psetFile": "C:\\x\\override.txt" }""")!;
+Check("export request json", $"{exportRequest.Configuration}|{exportRequest.PsetFile}|{exportRequest.ParameterMappingFile}", @"H29|C:\x\override.txt|");
+Check("export files json", WritebackJson.Serialize(overridden),
+    """{"psetFile":"C:\\x\\override.txt","psetFileExists":true,"psetFileIsOverride":true,"parameterMappingFile":"C:\\x\\table.txt","parameterMappingFileExists":true,"parameterMappingFileIsOverride":true,"warning":null}""");
+
 Console.WriteLine(failed == 0 ? "ALL PASSED" : $"{failed} FAILED");
 return failed;

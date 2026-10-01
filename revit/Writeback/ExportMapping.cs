@@ -40,66 +40,34 @@ public sealed class ExportMapping
     /// <summary>
     /// Reads the mapping files of the named IFC export setup of the document. The setups live in
     /// the IFC exporter's UI assembly, which is reached by reflection like the rest of the add-in
-    /// does. Never throws: a setup that cannot be read gives an empty mapping and a note.
+    /// does. An override path replaces the setup's file of that kind and keeps the setup's other
+    /// settings. Never throws: a setup that cannot be read gives an empty mapping and a note.
     /// </summary>
-    public static ExportMapping Load(Document document, string? configurationName)
+    public static ExportMapping Load(Document document, string? configurationName, string? psetOverride = null, string? mappingOverride = null)
     {
         var mapping = new ExportMapping { Configuration = configurationName };
-        if (string.IsNullOrWhiteSpace(configurationName))
-        {
-            mapping.Note = "No IFC export setup is known for this audit, so no property set mapping file was read.";
-            return mapping;
-        }
-
         try
         {
-            var configuration = FindConfiguration(document, configurationName!);
+            var configuration = string.IsNullOrWhiteSpace(configurationName) ? null : FindConfiguration(document, configurationName!);
             if (configuration == null)
             {
-                mapping.Note = $"The IFC export setup '{configurationName}' was not found, so no property set mapping file was read.";
+                mapping.Note = string.IsNullOrWhiteSpace(configurationName)
+                    ? "No IFC export setup is known for this audit"
+                    : $"The IFC export setup '{configurationName}' was not found";
+                mapping.Note += string.IsNullOrWhiteSpace(psetOverride) && string.IsNullOrWhiteSpace(mappingOverride)
+                    ? ", so no property set mapping file was read."
+                    : ", so only the override files were read.";
+                // The overrides still say where the exported values came from
+                var overrides = ExportFiles.Select(null, new ExportFileSettings(), psetOverride, mappingOverride, "", File.Exists);
+                mapping.Read(overrides);
+                if (overrides.Warning != null) mapping.Note += " " + overrides.Warning;
                 return mapping;
             }
 
             mapping.UseTypePropertiesInInstancePsets = GetBool(configuration, "UseTypePropertiesInInstacePSets");
-
-            if (GetBool(configuration, "ExportUserDefinedPsets"))
-            {
-                // Same fallback as the exporter: a missing file is looked for as <setup name>.txt
-                // next to the exporter.
-                var file = GetString(configuration, "ExportUserDefinedPsetsFileName");
-                if (string.IsNullOrEmpty(file) || !File.Exists(file))
-                {
-                    var fallback = Path.Combine(ExporterDirectory(), configurationName + ".txt");
-                    if (File.Exists(fallback))
-                    {
-                        file = fallback;
-                    }
-                    else
-                    {
-                        mapping.Note = $"The user-defined property set file of '{configurationName}' was not found: {file}";
-                        file = null;
-                    }
-                }
-
-                if (file != null)
-                {
-                    mapping.Mapping.ReadUserDefinedPsets(File.ReadAllLines(file));
-                    mapping.Files.Add(file);
-                }
-            }
-
-            // The exporter reads the table whenever the setup names a file that exists; the
-            // setup's checkbox for it is not consulted.
-            var table = GetString(configuration, "ExportUserDefinedParameterMappingFileName");
-            if (!string.IsNullOrEmpty(table) && File.Exists(table))
-            {
-                mapping.Mapping.ReadParameterMappingTable(File.ReadAllLines(table));
-                mapping.Files.Add(table!);
-            }
-            else if (GetBool(configuration, "ExportUserDefinedParameterMapping"))
-            {
-                mapping.Note = $"The parameter mapping table of '{configurationName}' was not found: {table}";
-            }
+            var selection = DescribeFiles(configuration, configurationName!, psetOverride, mappingOverride);
+            mapping.Read(selection);
+            mapping.Note = selection.Warning;
         }
         catch (Exception ex)
         {
@@ -108,6 +76,44 @@ public sealed class ExportMapping
         }
 
         return mapping;
+    }
+
+    /// <summary>The files the named setup of the document exports with, or null when there is no such setup.</summary>
+    public static ExportFileSelection? DescribeFiles(Document document, string configurationName)
+    {
+        var configuration = FindConfiguration(document, configurationName);
+        return configuration == null ? null : DescribeFiles(configuration, configurationName, null, null);
+    }
+
+    /// <summary>The files an export with this exporter configuration object and these overrides reads.</summary>
+    public static ExportFileSelection DescribeFiles(object configuration, string configurationName, string? psetOverride, string? mappingOverride)
+    {
+        return ExportFiles.Select(configurationName, ReadFileSettings(configuration), psetOverride, mappingOverride, ExporterDirectory(), File.Exists);
+    }
+
+    private static ExportFileSettings ReadFileSettings(object configuration)
+    {
+        return new ExportFileSettings
+        {
+            ExportUserDefinedPsets = GetBool(configuration, "ExportUserDefinedPsets"),
+            UserDefinedPsetsFileName = GetString(configuration, "ExportUserDefinedPsetsFileName"),
+            ExportUserDefinedParameterMapping = GetBool(configuration, "ExportUserDefinedParameterMapping"),
+            ParameterMappingFileName = GetString(configuration, "ExportUserDefinedParameterMappingFileName")
+        };
+    }
+
+    private void Read(ExportFileSelection selection)
+    {
+        if (selection.PsetFile != null && selection.PsetFileExists)
+        {
+            Mapping.ReadUserDefinedPsets(File.ReadAllLines(selection.PsetFile));
+            Files.Add(selection.PsetFile);
+        }
+        if (selection.ParameterMappingFile != null && selection.ParameterMappingFileExists)
+        {
+            Mapping.ReadParameterMappingTable(File.ReadAllLines(selection.ParameterMappingFile));
+            Files.Add(selection.ParameterMappingFile);
+        }
     }
 
     private static object? FindConfiguration(Document document, string name)

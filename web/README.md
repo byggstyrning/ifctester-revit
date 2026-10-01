@@ -48,6 +48,27 @@ The Revit plugin automatically injects the API URL into the web app. The API ser
 
 Elements are selected by their IFC GlobalId (GUID), not by Revit Element ID. This ensures accurate selection even when IFC files are modified.
 
+### Property set file override
+
+*Export Active View as IFC* exports with a named IFC export setup. When the setup's user-defined property
+set file lives on a drive this PC cannot reach, Revit skips it without a word and the export has no project
+property sets. When the add-in reports `"export-overrides"` in `GET /status` capabilities, the toolbar shows
+under the setup dropdown:
+
+- the setup's own property set file (`GET /ifc-configuration-files?name=`), marked *not found* when missing;
+- a dropdown of the `*.txt` files in a folder (`GET /pset-files?dir=`), default
+  `\\bim-byggp1.hogerklick.bim\H29\BIM-tools\pset`, editable under *Folder* and remembered in localStorage;
+- a text field for any other path;
+- the same, collapsed, for the parameter mapping table.
+
+A chosen file is sent with `POST /export-ifc` as `psetFile` / `parameterMappingFile`. The add-in puts it on its
+temporary copy of the setup only; the setup saved in the model never changes. A missing override file fails the
+export rather than exporting without it. `GET /export-status/{id}` reports the files the export read
+(`exportFiles`) and a `warning` when the setup's own file is missing; the page shows that in one line under the
+controls. A model exported with an override is labelled *Pset override: &lt;file&gt;* in the model list and above
+the audit results, so it is not mistaken for the delivery export. Against an older add-in the controls stay
+hidden and the export is sent as before.
+
 ### Write-back
 
 When the connected add-in reports `"capabilities": ["writeback"]` in `GET /status`, the failed-elements
@@ -57,10 +78,13 @@ tables in the audit results get a **Fix in Revit** column.
    requirement. A requirement with one allowed value prefills it; an enumeration is offered as suggestions.
 2. **Review**: *Review changes* asks Revit (`POST /resolve-parameters`) which parameter on which element each
    change would write to, and shows the current and the new value. With several candidate parameters the
-   user picks one. Type parameters are marked, because they change every instance of the type.
+   user picks one. Type parameters are marked, because they change every instance of the type. The request
+   names the setup and any property set file override the audited export was made with, so Revit reads the
+   same mapping files the export did (without them it falls back to its own last export).
 3. **Apply**: *Apply to Revit* sends the reviewed changes (`POST /apply-changes`). Revit writes them in one
    transaction, so one Ctrl+Z undoes them. Changes Revit refuses stay pending with its message.
-4. **Confirm**: *Re-export and re-audit* runs the normal export with the configuration selected in the toolbar.
+4. **Confirm**: *Re-export and re-audit* runs the normal export with the configuration selected in the toolbar,
+   and with its property set file override if one is chosen.
 
 In scope are `Property` requirements that name one property set and one property, and `Attribute`
 requirements for `Name`, `Description`, `ObjectType` and `LongName`. Every other failure shows the reason
@@ -126,6 +150,7 @@ Covers the web app / Pyodide / ifctester side only (not the Revit or ArchiCAD co
 | Native reference | `pip install -r tests/python/requirements.txt && pytest tests/python` | desktop ifctester 0.9 vs `tests/fixtures/expected-*.json` |
 | In-browser audit | `bash scripts/download-packages.sh && npx playwright install chromium && npm run test:e2e` | real worker (Pyodide + wasm ifcopenshell + ifctester); must reproduce the native reference |
 | Revit write-back | same `npm run test:e2e` (`tests/e2e/writeback.spec.ts`) | the real UI against a mocked Revit API (Playwright route interception); asserts the bodies sent to `/resolve-parameters` and `/apply-changes` |
+| Pset file override | same `npm run test:e2e` (`tests/e2e/export-overrides.spec.ts`) | mocked Revit API; asserts `psetFile` in the `/export-ifc` and `/resolve-parameters` bodies, the status line and the override labels, and that an older add-in gets no controls |
 
 Fixtures live in `tests/fixtures` (IFC4 + IFC2X3 model, IDS files covering every facet type, prohibited and optional specs).
 After an intentional ifctester behaviour change regenerate the expectations with

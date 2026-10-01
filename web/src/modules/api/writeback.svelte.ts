@@ -407,6 +407,22 @@ function parseCandidate(raw: Record<string, unknown>): ParameterCandidate {
     };
 }
 
+/**
+ * The setup and file overrides the audited export was made with, so resolve reads the same
+ * mapping files the export did. Falls back to the setup selected in the toolbar.
+ */
+export function resolveSettings(): { configuration?: string; psetFile?: string; parameterMappingFile?: string } {
+    const last = Revit.lastExport;
+    if (last?.fileName && IFCModels.models.some((model) => model.fileName === last.fileName)) {
+        return {
+            configuration: last.configuration,
+            ...(last.psetFile ? { psetFile: last.psetFile } : {}),
+            ...(last.parameterMappingFile ? { parameterMappingFile: last.parameterMappingFile } : {})
+        };
+    }
+    return Revit.exportConfiguration ? { configuration: Revit.exportConfiguration } : {};
+}
+
 /** Asks Revit which parameter on which element each pending change would write to. Writes nothing. */
 export async function resolvePending(): Promise<boolean> {
     const changes = pendingChanges();
@@ -425,7 +441,7 @@ export async function resolvePending(): Promise<boolean> {
                         : { key: change.key, globalId: change.globalId, facet: change.facet, name: change.name }
                 ),
                 // Tells Revit whose property set mapping files to read; without it, it uses its last export
-                ...(Revit.exportConfiguration ? { configuration: Revit.exportConfiguration } : {})
+                ...resolveSettings()
             },
             RESOLVE_TIMEOUT
         );

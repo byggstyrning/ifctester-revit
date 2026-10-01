@@ -28,14 +28,14 @@ public sealed class WritebackEndpoints
     private static readonly TimeSpan StartTimeout = TimeSpan.FromSeconds(30);
 
     private readonly RevitWorkQueue _queue;
-    private readonly Func<string?> _lastExportConfiguration;
+    private readonly Func<ExportRequestSettings?> _lastExport;
 
     /// <param name="queue">Runs the work on the Revit thread.</param>
-    /// <param name="lastExportConfiguration">The IFC export setup of the last export the server ran, if any.</param>
-    public WritebackEndpoints(RevitWorkQueue queue, Func<string?> lastExportConfiguration)
+    /// <param name="lastExport">The IFC export setup and file overrides of the last export the server ran, if any.</param>
+    public WritebackEndpoints(RevitWorkQueue queue, Func<ExportRequestSettings?> lastExport)
     {
         _queue = queue;
-        _lastExportConfiguration = lastExportConfiguration;
+        _lastExport = lastExport;
     }
 
     public Task<WritebackHttpResult> ResolveParameters(string body)
@@ -43,12 +43,15 @@ public sealed class WritebackEndpoints
         return Handle<ResolveRequest, ResolveResponse>(body, r => r.Items != null, "items", (app, request) =>
         {
             var document = app.ActiveUIDocument?.Document;
-            var configuration = string.IsNullOrWhiteSpace(request.Configuration) ? _lastExportConfiguration() : request.Configuration;
-            var mapping = document == null ? ExportMapping.None : ExportMapping.Load(document, configuration);
+            var settings = ExportRequestSettings.ForResolve(request, _lastExport());
+            var mapping = document == null
+                ? ExportMapping.None
+                : ExportMapping.Load(document, settings.Configuration, settings.PsetFile, settings.ParameterMappingFile);
             return WritebackService.Resolve(document, request, mapping);
         });
     }
 
+    // Apply writes the parameters resolve named, so it reads no mapping files and needs no overrides
     public Task<WritebackHttpResult> ApplyChanges(string body)
     {
         return Handle<ApplyRequest, ApplyResponse>(body, r => r.Changes != null, "changes", (app, request) =>
