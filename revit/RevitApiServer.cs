@@ -1117,6 +1117,9 @@ public class RevitApiServer : IDisposable
         public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
     }
 
+    /// <summary>Where POST /pset-files/save writes a file the request gives no path for. Settable for tests.</summary>
+    public string PsetSaveFolder { get; set; } = Writeback.PsetFileWriter.DefaultFolder();
+
     public RevitApiServer(int port = 48881)
     {
         _port = port;
@@ -1283,6 +1286,18 @@ public class RevitApiServer : IDisposable
             {
                 await HandleWriteback(request, response, _writeback.ApplyChanges);
             }
+            else if (path == "/model-parameters" && method == "GET")
+            {
+                await HandleWriteback(request, response, _ => _writeback.ModelParameters());
+            }
+            else if (path == "/pset-suggestions" && method == "POST")
+            {
+                await HandleWriteback(request, response, _writeback.PsetSuggestions);
+            }
+            else if (path == "/pset-files/save" && method == "POST")
+            {
+                await HandleWriteback(request, response, body => Writeback.WritebackEndpoints.SavePsetFile(body, PsetSaveFolder));
+            }
             else if (path.StartsWith("/export-status/") && method == "GET")
             {
                 var jobId = path.Replace("/export-status/", "");
@@ -1402,7 +1417,7 @@ public class RevitApiServer : IDisposable
             connected = true,
             configsReady = configsReady,
             version = "1.4.0",
-            capabilities = new[] { "writeback", "export-overrides" }
+            capabilities = new[] { "writeback", "export-overrides", "pset-builder" }
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(status);

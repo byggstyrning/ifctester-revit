@@ -146,6 +146,13 @@ class WASMModule extends EventEmitter {
     }
 
     /**
+     * Every entity of a schema by canonical name: [supertype, is a type object, is abstract]
+     */
+    async getEntityTree(schema: string) {
+        return this._apiCall('getEntityTree', schema) as Promise<Record<string, [string | null, boolean, boolean]>>;
+    }
+
+    /**
      * Get predefined types for a given IFC entity
      */
     async getPredefinedTypes(schema: string, entity: string) {
@@ -345,6 +352,7 @@ export const {
     init,
     getAllEntityClasses,
     getAllDataTypes,
+    getEntityTree,
     getPredefinedTypes,
     getEntityAttributes,
     getApplicablePsets,

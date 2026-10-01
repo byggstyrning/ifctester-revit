@@ -64,7 +64,7 @@ export type IdsDocument = {
 
 export type DocumentState = {
     activeTab: "info" | "applicability" | "requirements";
-    viewMode: "editor" | "viewer";
+    viewMode: "editor" | "viewer" | "psets";
     activeSpecification: number | null;
     auditReport?: string | null;
 };

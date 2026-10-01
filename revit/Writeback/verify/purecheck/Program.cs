@@ -1,5 +1,6 @@
 // Console check of the write-back classes that need no Revit: GlobalId compression, the
 // mapping file parsers, value parsing and the JSON contract. Exit code = number of failures.
+using System.Text;
 using IfcTesterRevit.Writeback;
 
 var failed = 0;
@@ -120,7 +121,50 @@ Check("resolve request json", Res(ExportRequestSettings.ForResolve(WritebackJson
 var exportRequest = WritebackJson.Deserialize<ExportIfcRequest>("""{ "configuration": "H29", "psetFile": "C:\\x\\override.txt" }""")!;
 Check("export request json", $"{exportRequest.Configuration}|{exportRequest.PsetFile}|{exportRequest.ParameterMappingFile}", @"H29|C:\x\override.txt|");
 Check("export files json", WritebackJson.Serialize(overridden),
-    """{"psetFile":"C:\\x\\override.txt","psetFileExists":true,"psetFileIsOverride":true,"parameterMappingFile":"C:\\x\\table.txt","parameterMappingFileExists":true,"parameterMappingFileIsOverride":true,"warning":null}""");
+    """{"psetFile":"C:\\x\\override.txt","psetFileExists":true,"psetFileIsOverride":true,"parameterMappingFile":"C:\\x\\table.txt","parameterMappingFileExists":true,"parameterMappingFileIsOverride":true,"warning":null,"ifcVersion":null}""");
+
+// Pset builder: name keys as the exporter compares them, entity keys for matching elements
+Check("parameter key", PsetNames.ParameterKey("Fire Rating"), "FIRERATING");
+Check("parameter key pset name", PsetNames.ParameterKey("Pset_WallCommon.Acoustic Rating"), "PSET_WALLCOMMON.ACOUSTICRATING");
+foreach (var (entity, key) in new[] { ("IfcWall", "IFCWALL"), ("IFCWALL", "IFCWALL"), ("IfcWallType", "IFCWALL"), ("IfcWallStandardCase", "IFCWALL"), ("IfcDoorStyle", "IFCDOOR"),
+             ("IfcSlabElementedCase", "IFCSLAB"), ("IfcBuildingElementProxyType", "IFCBUILDINGELEMENTPROXY"), (" IfcSpace ", "IFCSPACE"), ("IfcTypeObject", "IFCTYPEOBJECT") })
+    Check($"occurrence key {entity}", PsetNames.OccurrenceKey(entity), key);
+Check("export-as class", PsetNames.ExportAsClass("IfcWall.SHEAR"), "IfcWall");
+Check("export-as class plain", PsetNames.ExportAsClass(" IfcBeam "), "IfcBeam");
+
+var suggestionRequest = WritebackJson.Deserialize<PsetSuggestionRequest>("""{ "items": [ { "key": "r1", "propertySet": "Projekt", "name": "Brandklass", "entities": ["IfcWall", "IFCSLAB"] } ] }""")!;
+Check("suggestion request json", $"{suggestionRequest.Items![0].Key}|{suggestionRequest.Items[0].PropertySet}|{suggestionRequest.Items[0].Name}|{string.Join(",", suggestionRequest.Items[0].Entities!)}", "r1|Projekt|Brandklass|IfcWall,IFCSLAB");
+
+// Pset file save: default folder, refusal to overwrite, UTF-8 without BOM, CRLF kept
+var saveRoot = Path.Combine(Path.GetTempPath(), "ifctester-purecheck-" + Guid.NewGuid().ToString("N"));
+var saveDefault = Path.Combine(saveRoot, "psets");
+try
+{
+    var content = "# Generated\r\nPropertySet:\tProjekt\tI\tIfcWall\r\n\tBrandklass\tLabel\tBrandklass åäö\r\n";
+    var saved = PsetFileWriter.Save(new PsetFileSaveRequest { Name = "Projekt A: draft", Content = content }, saveDefault);
+    Check("save default path", saved.Path, Path.Combine(saveDefault, "Projekt A_ draft.txt"));
+    Check("save created the default folder", Directory.Exists(saveDefault), true);
+    var bytes = File.ReadAllBytes(saved.Path);
+    Check("save has no BOM", bytes.Length > 2 && bytes[0] == 0xEF && bytes[1] == 0xBB, false);
+    Check("save is UTF-8 with CRLF", Encoding.UTF8.GetString(bytes), content);
+    Check("save reports bytes", saved.Bytes, (long)bytes.Length);
+    Check("save first time not overwritten", saved.Overwritten, false);
+    int Status(Action action) { try { action(); return 200; } catch (PsetFileSaveException ex) { return ex.StatusCode; } }
+    Check("save refuses to overwrite", Status(() => PsetFileWriter.Save(new PsetFileSaveRequest { Name = "Projekt A: draft", Content = "x" }, saveDefault)), 409);
+    Check("refused save left the file", File.ReadAllText(saved.Path), content);
+    var again = PsetFileWriter.Save(new PsetFileSaveRequest { Path = saved.Path, Content = "y", Overwrite = true }, saveDefault);
+    Check("save with overwrite", $"{again.Overwritten}|{File.ReadAllText(saved.Path)}", "True|y");
+    Check("save to a missing folder", Status(() => PsetFileWriter.Save(new PsetFileSaveRequest { Path = Path.Combine(saveRoot, "nope", "a.txt"), Content = "x" }, saveDefault)), 400);
+    Check("save relative path", Status(() => PsetFileWriter.Save(new PsetFileSaveRequest { Path = "a.txt", Content = "x" }, saveDefault)), 400);
+    Check("save without content", Status(() => PsetFileWriter.Save(new PsetFileSaveRequest { Name = "b" }, saveDefault)), 400);
+    Check("save keeps a given extension", PsetFileWriter.ResolvePath(new PsetFileSaveRequest { Name = "x.TXT" }, saveDefault), Path.Combine(saveDefault, "x.TXT"));
+    Check("save without a name", PsetFileWriter.ResolvePath(new PsetFileSaveRequest(), saveDefault), Path.Combine(saveDefault, "pset.txt"));
+    Check("default folder", PsetFileWriter.DefaultFolder(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IfcTesterRevit", "psets"));
+}
+finally
+{
+    if (Directory.Exists(saveRoot)) Directory.Delete(saveRoot, true);
+}
 
 Console.WriteLine(failed == 0 ? "ALL PASSED" : $"{failed} FAILED");
 return failed;

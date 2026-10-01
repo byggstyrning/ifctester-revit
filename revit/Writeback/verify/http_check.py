@@ -225,6 +225,53 @@ try:
     check('missing items -> 400', status, 400)
     log('   ', body)
 
+    # pset builder: the model's parameters, suggestions and saving a file
+    started = time.time()
+    status, body = get('/model-parameters')
+    log('model-parameters -> %s after %.0f ms, %d bytes' % (status, (time.time() - started) * 1000, len(body or '')))
+    params = json.loads(body) if status == 200 else {}
+    brand = [x for x in params.get('parameters', []) if x['name'] == 'Brandklass']
+    check('model-parameters', (status, params.get('elementCount', 0) >= 6, [(x['origin'], x['scope'], x['instanceCount']) for x in brand]), (200, True, [('shared', 'instance', 6)]))
+    log('   elapsedMs', params.get('elapsedMs'), 'document', params.get('document'))
+
+    status, body, response = post('/pset-suggestions', u'{"items":[{"key":"b","propertySet":"Projekt","name":"Brandklass","entities":["IfcWall"]},'
+                                                        u'{"key":"f","propertySet":"Pset_WallCommon","name":"FireRating","entities":["IfcWall"]},'
+                                                        u'{"key":"n","propertySet":"X","name":"DoesNotExist","entities":["IfcWall"]}]}')
+    log('pset-suggestions ->', status, body)
+    suggested = dict((i['key'], i) for i in json.loads(body)['items']) if status == 200 else {}
+    check('pset-suggestions', (status, [(s['parameter'], s['scope']) for s in suggested.get('b', {}).get('suggestions', [])][:1],
+                               # FIRE_RATING and DOOR_FIRE_RATING are one enum value; the name Revit reports is either
+                               [(s['parameter'], s['scope'], s['builtInParameter'] in ('FIRE_RATING', 'DOOR_FIRE_RATING')) for s in suggested.get('f', {}).get('suggestions', [])][:1],
+                               suggested.get('n', {}).get('suggestions')),
+          (200, [('Brandklass', 'instance')], [('Fire Rating', 'type', True)], []))
+    status, body, response = post('/pset-suggestions', u'{}')
+    check('pset-suggestions without items -> 400', status, 400)
+
+    save_folder = os.path.join(OUT, 'psets-http-%s' % YEAR)
+    if os.path.isdir(save_folder):
+        for name in os.listdir(save_folder):
+            os.remove(os.path.join(save_folder, name))
+    server.PsetSaveFolder = save_folder
+    content = u'PropertySet:\tProjekt\tI\tIfcWall\r\n\tBrandklass\tLabel\tBrandklass ' + unichr(0xe5) + unichr(0xe4) + unichr(0xf6) + u'\r\n'
+    status, body, response = post('/pset-files/save', u'{"name":"Projekt test","content":%s}' % json_string(content))
+    log('save ->', status, body)
+    saved = os.path.join(save_folder, 'Projekt test.txt')
+    raw = open(saved, 'rb').read() if os.path.isfile(saved) else b''
+    check('save to the default folder', (status, '"overwritten":false' in body, os.path.isfile(saved)), (200, True, True))
+    check('saved as UTF-8 without BOM, CRLF kept', (raw[:3] != b'\xef\xbb\xbf', raw.count(b'\r\n'), content.encode('utf-8') == raw), (True, 2, True))
+    status, body, response = post('/pset-files/save', u'{"name":"Projekt test","content":"x"}')
+    check('save refuses to overwrite -> 409 with the path', (status, '"error"' in body, 'Projekt test.txt' in body), (409, True, True))
+    status, body, response = post('/pset-files/save', u'{"path":%s,"content":"y","overwrite":true}' % json_string(saved))
+    check('save with overwrite', (status, '"overwritten":true' in body, open(saved, 'rb').read()), (200, True, b'y'))
+    status, body, response = post('/pset-files/save', u'{"path":%s,"content":"y"}' % json_string(os.path.join(OUT, 'no-such-folder', 'a.txt')))
+    check('save to a missing folder -> 400', status, 400)
+    status, body, response = post('/pset-files/save', u'{"content": oops')
+    check('save with bad json -> 400', status, 400)
+
+    status, body = get('/ifc-configuration-files?name=WB%20Test%20Setup')
+    log('configuration files with schema ->', status, body)
+    check('setup files name the IFC version', (status, '"ifcVersion":"' in body), (200, True))
+
     # /status: its config preload waits on an external event that cannot fire here, so it answers
     # after its own retries; only the new field is of interest.
     started = time.time()
@@ -232,7 +279,7 @@ try:
     done = pump(status_task, 60)
     status_body = status_task.Result.Content.ReadAsStringAsync().Result if done else 'timed out'
     log('status after %.0fs ->' % (time.time() - started), status_body)
-    check('status reports its capabilities', '"capabilities":["writeback","export-overrides"]' in status_body, True)
+    check('status reports its capabilities', '"capabilities":["writeback","export-overrides","pset-builder"]' in status_body, True)
     check('status keeps its other fields', ('"connected":true' in status_body, '"version":"1.4.0"' in status_body, '"configsReady":' in status_body), (True, True, True))
 
     uiapp.Application.DocumentChanged -= on_changed

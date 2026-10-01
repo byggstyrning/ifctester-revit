@@ -23,6 +23,7 @@ This repository combines the IfcTester web application (Svelte/Vite) with native
   - Export IFC directly from the plugin
 - **IDS Authoring**: Create and edit IDS documents with a modern web interface
 - **IFC Validation**: Validate IFC models against IDS specifications using WebAssembly/Pyodide
+- **Pset builder** (Revit): Write the Revit user-defined property set file for an IDS from the IDS and the open model, and export with it
 - **HTTP API Server**: Local server for bidirectional communication
 - **Offline Support**: Python packages bundled locally for offline operation
 
@@ -171,10 +172,13 @@ Both plugins expose a local HTTP API for communication with the web interface:
 | `/pset-files?dir=` | GET | Revit only: the `*.txt` files in a folder, for the override dropdown. Read-only |
 | `/resolve-parameters` | POST | Revit only: find the parameters a failed IDS property or attribute could be fixed in |
 | `/apply-changes` | POST | Revit only: write fix values to those parameters in one transaction |
+| `/model-parameters` | GET | Revit only: every parameter on the model elements and their types: instance/type, element counts, categories, storage type, shared/project/family/built-in, read-only, how many have a value. Read-only |
+| `/pset-suggestions` | POST | Revit only: for `{ propertySet, name, entities[] }` items, the parameters the exporter would read by name, with coverage |
+| `/pset-files/save` | POST | Revit only: write a generated pset file (`{ path?, name?, content, overwrite }`); 409 when it exists and `overwrite` is false |
 
-The write-back endpoints and the property set file override are described in
+The write-back endpoints, the property set file override and the pset builder are described in
 [web/README.md](web/README.md#property-set-file-override). `GET /status` lists `capabilities` (`writeback`,
-`export-overrides`) so the page only shows controls the add-in supports.
+`export-overrides`, `pset-builder`) so the page only shows controls the add-in supports.
 
 **Default Ports:**
 - Revit: `48881`

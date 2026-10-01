@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ids xmlns="http://standards.buildingsmart.org/IDS" xmlns:xs="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://standards.buildingsmart.org/IDS http://standards.buildingsmart.org/IDS/1.0/ids.xsd">
+  <info><title>Pset builder test</title><version>2</version></info>
+  <specifications>
+    <specification name="Walls" ifcVersion="IFC2X3 IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><xs:restriction base="xs:string"><xs:enumeration value="IFCWALL"/><xs:enumeration value="IFCWALLSTANDARDCASE"/></xs:restriction></name></entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCLABEL"><propertySet><simpleValue>Projekt</simpleValue></propertySet><baseName><simpleValue>Brandklass</simpleValue></baseName></property>
+        <property dataType="IFCBOOLEAN"><propertySet><simpleValue>Projekt</simpleValue></propertySet><baseName><simpleValue>Bärande</simpleValue></baseName></property>
+        <property dataType="IFCLABEL"><propertySet><simpleValue>Pset_WallCommon</simpleValue></propertySet><baseName><simpleValue>FireRating</simpleValue></baseName></property>
+        <property dataType="IFCVOLUMEMEASURE"><propertySet><simpleValue>Projekt</simpleValue></propertySet><baseName><simpleValue>Volym</simpleValue></baseName></property>
+        <attribute><name><simpleValue>Name</simpleValue></name></attribute>
+        <material><value><simpleValue>Betong</simpleValue></value></material>
+      </requirements>
+    </specification>
+    <specification name="Doors" ifcVersion="IFC2X3 IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCDOOR</simpleValue></name><predefinedType><simpleValue>DOOR</simpleValue></predefinedType></entity>
+      </applicability>
+      <requirements>
+        <property dataType="IFCLABEL"><propertySet><simpleValue>Projekt</simpleValue></propertySet><baseName><simpleValue>Brandklass</simpleValue></baseName></property>
+        <property><propertySet><simpleValue>Projekt</simpleValue></propertySet><baseName><simpleValue>Typbeteckning</simpleValue></baseName></property>
+        <classification><system><simpleValue>CoClass</simpleValue></system></classification>
+      </requirements>
+    </specification>
+    <specification name="Spaces" ifcVersion="IFC2X3 IFC4">
+      <applicability minOccurs="1" maxOccurs="unbounded">
+        <entity><name><simpleValue>IFCSPACE</simpleValue></name></entity>
+        <property><propertySet><simpleValue>Projekt</simpleValue></propertySet><baseName><simpleValue>Rumsfunktion</simpleValue></baseName></property>
+      </applicability>
+      <requirements>
+        <property dataType="IFCTEXT"><propertySet><simpleValue>Projekt</simpleValue></propertySet><baseName><simpleValue>Rumsnamn</simpleValue></baseName></property>
+        <property dataType="IFCLABEL"><propertySet><simpleValue>Projekt</simpleValue></propertySet><baseName><xs:restriction base="xs:string"><xs:pattern value="Rum.*"/></xs:restriction></baseName></property>
+      </requirements>
+    </specification>
+  </specifications>
+</ids>

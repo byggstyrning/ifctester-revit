@@ -33,6 +33,7 @@ import hyperid from 'hyperid';
  * @property {boolean} parameterMappingFileExists
  * @property {boolean} parameterMappingFileIsOverride
  * @property {string | null} warning
+ * @property {string | null} [ifcVersion] - The setup's IFC version (IFC2x3CV2, IFC4, ...); only GET /ifc-configuration-files gives it
  */
 
 /**
@@ -47,6 +48,9 @@ import hyperid from 'hyperid';
 
 /** The add-in can take property set file overrides with an export (GET /status capabilities). */
 export const EXPORT_OVERRIDES = 'export-overrides';
+
+/** The add-in can scan the model's parameters, suggest pset mappings and save pset files (GET /status capabilities). */
+export const PSET_BUILDER = 'pset-builder';
 
 // Revit connection state
 /** @type {RevitState} */
@@ -385,6 +389,64 @@ const getJson = async (path, timeout) => {
         clearTimeout(timeoutId);
     }
 };
+
+/**
+ * A JSON request with a timeout. A non-2xx answer throws an Error carrying the add-in's message,
+ * the HTTP status as `status` and the parsed body as `data`.
+ * @param {string} method
+ * @param {string} path
+ * @param {unknown} body - Sent as JSON; undefined sends none
+ * @param {number} timeout
+ */
+const requestJson = async (method, path, body, timeout) => {
+    if (!Revit.apiUrl || !Revit.connected) {
+        throw new Error('Not connected to Revit');
+    }
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeout);
+    try {
+        const response = await fetch(`${Revit.apiUrl}${path}`, {
+            method,
+            mode: 'cors',
+            signal: controller.signal,
+            ...(body === undefined ? {} : { headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+        });
+        const data = await response.json().catch(() => null);
+        if (!response.ok) {
+            const failure = new Error(data?.error || `HTTP ${response.status}: ${response.statusText}`);
+            Object.assign(failure, { status: response.status, data });
+            throw failure;
+        }
+        return data;
+    } catch (err) {
+        if (err instanceof Error && err.name === 'AbortError') {
+            throw new Error('Revit did not answer in time');
+        }
+        throw err;
+    } finally {
+        clearTimeout(timeoutId);
+    }
+};
+
+/**
+ * Every parameter on the model elements of the active document and on their types (read-only scan).
+ * @returns {Promise<{ document: string | null, elementCount: number, typeCount: number, elapsedMs: number, parameters: import('../psetBuilder/psetFile').ModelParameter[], message: string | null }>}
+ */
+export const getModelParameters = () => requestJson('GET', '/model-parameters', undefined, 180000);
+
+/**
+ * Revit parameters the exporter would read each IFC property from, by name, best first.
+ * @param {{ key: string, propertySet: string, name: string, entities: string[] }[]} items
+ * @returns {Promise<{ elementCount: number, scopeMethod: string, elapsedMs: number, items: import('../psetBuilder/psetFile').SuggestionResult[], message: string | null }>}
+ */
+export const getPsetSuggestions = (items) => requestJson('POST', '/pset-suggestions', { items }, 180000);
+
+/**
+ * Writes a pset file on the Revit machine. Throws with `status` 409 when it exists and overwrite is false.
+ * @param {{ path?: string, name?: string, content: string, overwrite?: boolean }} request
+ * @returns {Promise<{ path: string, overwritten: boolean, bytes: number }>}
+ */
+export const savePsetFile = (request) => requestJson('POST', '/pset-files/save', request, 30000);
 
 /**
  * The property set file and mapping table a setup exports with, so the page can show its default.

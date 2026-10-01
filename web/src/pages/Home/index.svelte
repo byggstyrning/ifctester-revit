@@ -9,6 +9,7 @@
     import ApplicabilityPanel from "./ApplicabilityPanel.svelte";
     import RequirementsPanel from "./RequirementsPanel.svelte";
     import IdsViewer from "./IdsViewer.svelte";
+    import PsetBuilder from "./PsetBuilder.svelte";
     import SplashScreen from "$src/components/SplashScreen.svelte";
     import { Toaster } from "$lib/components/ui/sonner";
     import { error, success } from "$src/modules/utils/toast.svelte";
@@ -128,7 +129,7 @@
             <IdsTabs />
         {/if}
         <div class="ids-builder">
-            {#if IDS.Module.activeDocument && documentState?.viewMode !== 'viewer'}
+            {#if IDS.Module.activeDocument && documentState?.viewMode !== 'viewer' && documentState?.viewMode !== 'psets'}
                 <div class="ids-sidebar">
                     <div class="sidebar-header">
                         <h3>Specifications</h3>
@@ -240,10 +241,15 @@
                         <button class="toggle-btn" class:active={documentState?.viewMode === 'viewer'} onclick={() => updateActiveDocumentState({ viewMode: 'viewer', auditReport: null })}>
                             Viewer
                         </button>
+                        <button class="toggle-btn" class:active={documentState?.viewMode === 'psets'} onclick={() => updateActiveDocumentState({ viewMode: 'psets', auditReport: null })} title="Build a Revit property set file from this IDS">
+                            Pset builder
+                        </button>
                     </div>
 
                     {#if documentState?.viewMode === 'viewer'}
                         <IdsViewer />
+                    {:else if documentState?.viewMode === 'psets'}
+                        <PsetBuilder />
                     {:else if documentState?.activeSpecification === null}
                         <IdsMetadataEditor />
                     {:else}

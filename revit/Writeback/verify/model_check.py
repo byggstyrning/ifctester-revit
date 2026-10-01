@@ -42,6 +42,281 @@ def name_of(el):
     return Element.Name.__get__(el)
 
 
+def ifc_properties(path):
+    """(pset name, property name, IFC value type, value) for every property set in an IFC file."""
+    text = io.open(path, encoding='utf-8', errors='replace').read()
+    lines = dict(re.findall(r"^#(\d+)=\s*(.*)$", text, re.M))
+    found = set()
+    for line in lines.values():
+        m = re.match(r"IFCPROPERTYSET\('[^']*',#\d+,'([^']*)',[^,]*,\(([^)]*)\)\)", line)
+        if not m:
+            continue
+        for ref in re.findall(r"#(\d+)", m.group(2)):
+            p = re.match(r"IFCPROPERTYSINGLEVALUE\('([^']*)',[^,]*,(IFC\w+)\('?([^')]*)'?\)", lines.get(ref, ''))
+            if p:
+                found.add((m.group(1), p.group(1), p.group(2), p.group(3)))
+    return found
+
+
+def pset_builder_checks(doc, w1, w6, base_type, type2):
+    import time
+    from IfcTesterRevit.Writeback import (
+        ModelParameterScan, PsetFileSaveException, PsetFileSaveRequest, PsetFileWriter, PsetSuggestionRequest, WritebackJson)
+
+    # GET /model-parameters, called directly
+    started = time.time()
+    scan = ModelParameterScan.Scan(doc)
+    log('model-parameters: %d parameters on %d elements and %d types in %d ms (%.0f ms with the call)' % (
+        scan.Parameters.Count, scan.ElementCount, scan.TypeCount, scan.ElapsedMs, (time.time() - started) * 1000))
+    by = {}
+    for p in scan.Parameters:
+        by.setdefault(p.Name, []).append(p)
+    log('scanned categories:', sorted(set(c for p in scan.Parameters for c in p.Categories)))
+
+    def info(name, origin=None):
+        matches = [p for p in by.get(name, []) if origin is None or p.Origin == origin]
+        return matches[0] if matches else None
+
+    brand = info('Brandklass')
+    check('scan Brandklass', (brand.Origin, brand.Scope, brand.InstanceCount, brand.TypeCount, brand.WithValueCount, list(brand.Categories), brand.StorageType, brand.ReadOnly, brand.Guid is not None),
+          ('shared', 'instance', 6, 0, 1, ['Walls'], 'string', False, True))
+    fire = info('Fire Rating')
+    # BuiltInParameter has aliases: FIRE_RATING and DOOR_FIRE_RATING share one value, and ToString() gives either
+    log('   FIRE_RATING == DOOR_FIRE_RATING:', int(BuiltInParameter.FIRE_RATING) == int(BuiltInParameter.DOOR_FIRE_RATING), '| reported', fire.BuiltInParameter)
+    check('scan Fire Rating', (fire.Origin, System.Enum.Parse(BuiltInParameter, fire.BuiltInParameter) == BuiltInParameter.FIRE_RATING, fire.Scope, fire.TypeCount, fire.ElementCount, fire.WithValueCount),
+          ('built-in', True, 'type', 6, 6, 6))
+    acoustic = info('Pset_WallCommon.AcousticRating')
+    check('scan type shared parameter', (acoustic.Origin, acoustic.Scope, acoustic.TypeCount, acoustic.WithValueCount), ('shared', 'type', 6, 0))
+    length = info('Length')
+    check('scan Length is read-only, a double, a length', (length.Origin, length.ReadOnly, length.StorageType, length.DataType), ('built-in', True, 'double', 'length'))
+    antal = info('Antal')
+    check('scan Antal', (antal.StorageType, antal.InstanceCount), ('integer', 6))
+    log('   data types: Antal', antal.DataType, '| Brandklass', brand.DataType, '| Fire Rating', fire.DataType)
+    check('scan has no project parameters in the test model', [p.Name for p in scan.Parameters if p.Origin == 'project'], [])
+    check('scan json', '"origin":"shared"' in WritebackJson.Serialize(brand) and '"builtInParameter":null' in WritebackJson.Serialize(brand), True)
+    check('scan of no document', ModelParameterScan.Scan(None).Message, 'No model is open in Revit.')
+
+    # POST /pset-suggestions, called directly; w6 exports as a proxy through IfcExportAs
+    t = Transaction(doc, 'export as')
+    t.Start()
+    w6.get_Parameter(BuiltInParameter.IFC_EXPORT_ELEMENT_AS).Set('IfcBuildingElementProxy')
+    request = WritebackJson.Deserialize[PsetSuggestionRequest](u'{"items":['
+        u'{"key":"brand","propertySet":"Projekt","name":"Brandklass","entities":["IfcWall"]},'
+        u'{"key":"fire","propertySet":"Pset_WallCommon","name":"FireRating","entities":["IFCWALL"]},'
+        u'{"key":"acoustic","propertySet":"Pset_WallCommon","name":"AcousticRating","entities":["IfcWallStandardCase"]},'
+        u'{"key":"none","propertySet":"X","name":"DoesNotExist","entities":["IfcWall"]},'
+        u'{"key":"doors","propertySet":"Projekt","name":"Brandklass","entities":["IfcDoor"]},'
+        u'{"key":"proxy","propertySet":"Projekt","name":"Brandklass","entities":["IfcBuildingElementProxyType"]},'
+        u'{"key":"spaces","propertySet":"Projekt","name":"Antal","entities":["IfcWall","IfcSpace"]}]}')
+    started = time.time()
+    suggested = ModelParameterScan.Suggest(doc, request)
+    t.RollBack()
+    log('pset-suggestions: %d ms (%.0f ms with the call)' % (suggested.ElapsedMs, (time.time() - started) * 1000))
+    log('   scope method:', suggested.ScopeMethod)
+    res = dict((r.Key, r) for r in suggested.Items)
+    for r in suggested.Items:
+        log(WritebackJson.Serialize(r))
+
+    def best(key):
+        s = res[key].Suggestions
+        return (s[0].Parameter, s[0].Scope, s[0].Rule, s[0].Origin, s[0].ElementsWithParameter, s[0].ElementsWithValue, s[0].ElementsScanned) if s.Count else None
+
+    check('suggest Brandklass on walls (w6 exports as proxy)', (res['brand'].Scope, best('brand')), ('entities', ('Brandklass', 'instance', 'name', 'shared', 5, 1, 5)))
+    check('suggest FireRating: the type parameter, named without the space', best('fire'), ('Fire Rating', 'type', 'name', 'built-in', 5, 5, 5))
+    check('suggest FireRating names the built-in', System.Enum.Parse(BuiltInParameter, res['fire'].Suggestions[0].BuiltInParameter) == BuiltInParameter.FIRE_RATING, True)
+    check('suggest AcousticRating by <Pset>.<Property> on IfcWallStandardCase', best('acoustic'), ('Pset_WallCommon.AcousticRating', 'type', 'pset-name', 'shared', 5, 0, 5))
+    check('suggest nothing for an unknown name', (res['none'].Suggestions.Count, res['none'].Scope), (0, 'entities'))
+    check('suggest for an entity with no elements scans everything, with a note',
+          (res['doors'].Scope, res['doors'].ElementsScanned == suggested.ElementCount, res['doors'].Note is not None, best('doors')[:4]),
+          ('all', True, True, ('Brandklass', 'instance', 'name', 'shared')))
+    check('suggest IfcExportAs: the proxy wall only', (res['proxy'].Scope, best('proxy')[4:]), ('entities', (1, 0, 1)))
+    check('suggest notes the entity that matched nothing', (res['spaces'].Scope, res['spaces'].Note), ('entities', 'No model element was found as IfcSpace.'))
+
+    # POST /pset-files/save, called directly: a generated file for the walls
+    folder = os.path.join(OUT, 'psets-%s' % YEAR)
+    if os.path.isdir(folder):
+        for name in os.listdir(folder):
+            os.remove(os.path.join(folder, name))
+
+    def save(content, overwrite=False):
+        req = PsetFileSaveRequest()
+        req.Name = u'WB builder'
+        req.Content = content
+        req.Overwrite = overwrite
+        return PsetFileWriter.Save(req, folder)
+
+    first = (u'# Generated by model_check\r\n'
+             u'PropertySet:\tWB Builder\tI\tIfcWall\r\n'
+             u'\tBrandklass\tLabel\tBrandklass\r\n'
+             u'\tLangd\tPositiveLength\tLength\r\n'
+             u'\r\n'
+             u'PropertySet:\tWB Builder Typ\tT\tIfcWallType\r\n'
+             u'\tBrandklassTyp\tLabel\tFire Rating\r\n')
+    saved = save(first)
+    check('save writes to the folder', (saved.Path, os.path.isfile(saved.Path)), (os.path.join(folder, 'WB builder.txt'), True))
+    try:
+        save(first)
+        check('save refuses to overwrite', 'no exception', 409)
+    except PsetFileSaveException as ex:
+        check('save refuses to overwrite', ex.StatusCode, 409)
+
+    def export(name):
+        path = os.path.join(OUT, name)
+        if os.path.exists(path):
+            os.remove(path)
+        tx = Transaction(doc, 'export with the builder file')
+        tx.Start()
+        opts = IFCExportOptions()
+        opts.FileVersion = IFCVersion.IFC4
+        opts.AddOption('ExportUserDefinedPsets', 'true')
+        opts.AddOption('ExportUserDefinedPsetsFileName', saved.Path)
+        log('doc.Export', name, '->', doc.Export(OUT, name, opts))
+        tx.RollBack()
+        return ifc_properties(path)
+
+    props = export('wb-builder-1-%s.ifc' % YEAR)
+    log('properties of the builder sets:', sorted(p for p in props if p[0].startswith('WB Builder')))
+    check('round trip: instance shared parameter exported', ('WB Builder', 'Brandklass', 'IFCLABEL', 'EI60') in props, True)
+    check('round trip: PositiveLength (mixed case) gives a positive length measure', any(p[0] == 'WB Builder' and p[1] == 'Langd' and p[2] == 'IFCPOSITIVELENGTHMEASURE' for p in props), True)
+    check('round trip: type parameter on IfcWallType exported', sorted(set(p[3] for p in props if p[:2] == ('WB Builder Typ', 'BrandklassTyp'))), ['EI15', 'EI30'])
+
+    # The same file changed, exported again in the same session
+    second = first.replace(u'\tBrandklass\tLabel\tBrandklass\r\n', u'\tBrandklassV2\tLabel\tBrandklass\r\n').replace(u'WB Builder Typ', u'WB Builder Typ V2')
+    check('save with overwrite replaces the file', save(second, True).Overwritten, True)
+    props2 = export('wb-builder-2-%s.ifc' % YEAR)
+    log('properties of the builder sets after the change:', sorted(p for p in props2 if p[0].startswith('WB Builder')))
+    check('changed file is read by the next export in the same session',
+          (('WB Builder', 'BrandklassV2', 'IFCLABEL', 'EI60') in props2,
+           ('WB Builder', 'Brandklass', 'IFCLABEL', 'EI60') in props2,
+           any(p[0] == 'WB Builder Typ V2' for p in props2),
+           any(p[0] == 'WB Builder Typ' for p in props2)),
+          (True, False, True, False))
+
+
+def big_model_checks(app):
+    """Times the scan on a real model and exports one element with a project parameter in a
+    generated pset file. The model is opened detached and closed without saving; skipped when it
+    is not there (IFCTESTER_WB_BIGMODEL, default: the Snowdon Towers sample of this Revit)."""
+    import time
+    from IfcTesterRevit.Writeback import ModelParameterScan, PsetSuggestionRequest, WritebackJson
+
+    path = os.environ.get('IFCTESTER_WB_BIGMODEL') or r'C:\Program Files\Autodesk\Revit %s\Samples\Snowdon Towers Sample Architectural.rvt' % YEAR
+    if not os.path.isfile(path):
+        log('big model: not run, no model at', path)
+        return
+
+    options = OpenOptions()
+    if BasicFileInfo.Extract(path).IsWorkshared:
+        options.DetachFromCentralOption = DetachFromCentralOption.DetachAndPreserveWorksets
+    started = time.time()
+    big = app.OpenDocumentFile(ModelPathUtils.ConvertUserVisiblePathToModelPath(path), options)
+    log('big model: opened %s in %.0f s' % (big.Title, time.time() - started))
+    try:
+        started = time.time()
+        scan = ModelParameterScan.Scan(big)
+        log('big model: model-parameters %d parameters on %d elements and %d types in %d ms (%.0f ms with the call)' % (
+            scan.Parameters.Count, scan.ElementCount, scan.TypeCount, scan.ElapsedMs, (time.time() - started) * 1000))
+        scan = ModelParameterScan.Scan(big)
+        log('big model: second scan %d ms' % scan.ElapsedMs)
+        origins = {}
+        for p in scan.Parameters:
+            origins[p.Origin] = origins.get(p.Origin, 0) + 1
+        log('big model: parameters by origin', sorted(origins.items()))
+        per_category = {}
+        for el in ModelParameterScan.ModelElements(big):
+            name = el.Category.Name if el.Category else type(el).__name__
+            per_category[name] = per_category.get(name, 0) + 1
+        log('big model: elements per category', sorted(per_category.items(), key=lambda kv: -kv[1])[:25])
+        projects = [p for p in scan.Parameters if p.Origin == 'project']
+        for p in projects:
+            log('   project parameter', p.Name, p.Scope, p.StorageType, 'on', p.ElementCount, 'with value', p.WithValueCount, list(p.Categories)[:5])
+
+        request = WritebackJson.Deserialize[PsetSuggestionRequest](u'{"items":['
+            u'{"key":"fire","propertySet":"Pset_WallCommon","name":"FireRating","entities":["IfcWall"]},'
+            u'{"key":"mark","propertySet":"Pset_DoorCommon","name":"Mark","entities":["IfcDoor"]},'
+            u'{"key":"name","propertySet":"Rum","name":"Name","entities":["IfcSpace"]},'
+            u'{"key":"none","propertySet":"X","name":"DoesNotExist","entities":["IfcWall","IfcSlab"]}]}')
+        suggested = ModelParameterScan.Suggest(big, request)
+        log('big model: pset-suggestions %d ms' % suggested.ElapsedMs)
+        for r in suggested.Items:
+            s = r.Suggestions
+            log('   %s: scope %s, scanned %d, best %s' % (r.Key, r.Scope, r.ElementsScanned,
+                (s[0].Parameter, s[0].Scope, s[0].Origin, s[0].ElementsWithParameter, s[0].ElementsWithValue) if s.Count else None))
+        check('big model: walls are found by IFC class', suggested.Items[0].Scope, 'entities')
+
+        # A project parameter (instance, text, with a value) in a generated set, on one isolated element
+        candidate = None
+        elements = ModelParameterScan.ModelElements(big)
+        for p in projects:
+            if p.Scope == 'type' or p.StorageType != 'string' or p.WithValueCount == 0:
+                continue
+            for el in elements:
+                param = el.LookupParameter(p.Name)
+                if param is not None and not param.IsShared and param.Id.Value > 0 and param.AsString():
+                    candidate = (p, el, param.AsString())
+                    break
+            if candidate:
+                break
+        if candidate is None:
+            log('big model: no instance text project parameter with a value; project parameter export not tried')
+            return
+        p, el, value = candidate
+        control = None
+        for param in el.Parameters:
+            if param.Id.Value < 0 and param.StorageType == StorageType.String and param.AsString() and param.Definition.Visible \
+                    and param.Definition.Name not in ('IfcGUID', 'IfcExportAs'):
+                control = (param.Definition.BuiltInParameter.ToString(), param.Definition.Name, param.AsString())
+                break
+        log('big model: project parameter', p.Name, '=', value, 'on', el.Id.Value, el.Category.Name,
+            ('| control %s (BuiltInParameter.%s) = %s' % (control[1], control[0], control[2])) if control else '| no control')
+        ifc_class = {'Windows': 'IfcWindow', 'Doors': 'IfcDoor', 'Rooms': 'IfcSpace'}.get(el.Category.Name, 'IfcBuildingElementProxy')
+
+        pset = os.path.join(OUT, 'big-project-param-%s.txt' % YEAR)
+        lines = [u'PropertySet:\tWB Project\tI\t%s' % ifc_class,
+                 u'\tProjektparameter\tLabel\t%s' % p.Name]
+        if control:
+            lines.append(u'\tKontrollNamn\tLabel\t%s' % control[1])
+            lines.append(u'\tKontrollBip\tLabel\tBuiltInParameter.%s' % control[0])
+        lines += [u'PropertySet:\tWB Project Super\tI\tIfcElement',
+                  u'\tProjektparameter\tLabel\t%s' % p.Name]
+        # Closed before the export reads it: an unclosed IronPython file is only flushed when collected
+        with io.open(pset, 'w', encoding='utf-8', newline='') as f:
+            f.write(u'\r\n'.join(lines) + u'\r\n')
+
+        ifc_name = 'big-project-param-%s.ifc' % YEAR
+        ifc_path = os.path.join(OUT, ifc_name)
+        if os.path.exists(ifc_path):
+            os.remove(ifc_path)
+        tx = Transaction(big, 'isolate and export')
+        tx.Start()
+        view_type = [t for t in FilteredElementCollector(big).OfClass(ViewFamilyType) if t.ViewFamily == ViewFamily.ThreeDimensional][0]
+        view = View3D.CreateIsometric(big, view_type.Id)
+        view.IsolateElementTemporary(el.Id)
+        view.ConvertTemporaryHideIsolateToPermanent()
+        opts = IFCExportOptions()
+        opts.FileVersion = IFCVersion.IFC4
+        opts.FilterViewId = view.Id
+        opts.AddOption('VisibleElementsOfCurrentView', 'true')
+        opts.AddOption('ExportUserDefinedPsets', 'true')
+        opts.AddOption('ExportUserDefinedPsetsFileName', pset)
+        started = time.time()
+        log('big model: doc.Export ->', big.Export(OUT, ifc_name, opts), 'in %.0f s' % (time.time() - started))
+        tx.RollBack()
+        props = ifc_properties(ifc_path) if os.path.exists(ifc_path) else set()
+        ours = sorted(x for x in props if x[0].startswith('WB Project'))
+        log('big model: WB Project properties in the IFC:', ours)
+        log('big model: the value in the exporter\'s own Revit sets:', sorted(x for x in props if x[1] == p.Name))
+        if control:
+            log('RESULT control by name:', any(x[:2] == ('WB Project', 'KontrollNamn') for x in ours),
+                '| by BuiltInParameter.:', any(x[:2] == ('WB Project', 'KontrollBip') for x in ours))
+        log('RESULT project parameter %s in a set on %s: %s | in a set on IfcElement: %s' % (
+            p.Name, ifc_class,
+            'EXPORTED' if any(x[:2] == ('WB Project', 'Projektparameter') for x in ours) else 'NOT EXPORTED',
+            'EXPORTED' if any(x[:2] == ('WB Project Super', 'Projektparameter') for x in ours) else 'NOT EXPORTED'))
+    finally:
+        big.Close(False)
+
+
 try:
     uiapp = __revit__
     app = uiapp.Application
@@ -339,6 +614,13 @@ try:
         fails.append('saved setup')
         log('FAIL saved setup:', traceback.format_exc())
 
+    # ---- pset builder: parameter scan, suggestions, a generated file through a real export ---
+    try:
+        pset_builder_checks(doc, w1, w6, base_type, type2)
+    except Exception:
+        fails.append('pset builder')
+        log('FAIL pset builder:', traceback.format_exc())
+
     # The HTTP layer needs an active document: see wb_http.py, which opens this model.
     model = os.path.join(OUT, 'wb-model-%s.rvt' % YEAR)
     if os.path.exists(model):
@@ -361,6 +643,13 @@ try:
 
     app.DocumentChanged -= on_changed
     doc.Close(False)
+
+    # ---- a real model: scan time, and whether a project parameter exports --------------------
+    try:
+        big_model_checks(app)
+    except Exception:
+        fails.append('big model')
+        log('FAIL big model:', traceback.format_exc())
     log('FAILED: %s' % fails if fails else 'ALL PASSED')
 except Exception:
     log('EXCEPTION', traceback.format_exc())

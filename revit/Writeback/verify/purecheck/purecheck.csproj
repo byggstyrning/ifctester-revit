@@ -12,6 +12,7 @@
     <ItemGroup>
         <Compile Include="..\..\ExportFiles.cs" />
         <Compile Include="..\..\IfcGuid.cs" />
+        <Compile Include="..\..\PsetBuilderContracts.cs" />
         <Compile Include="..\..\PsetMapping.cs" />
         <Compile Include="..\..\ValueParsing.cs" />
         <Compile Include="..\..\WritebackContracts.cs" />

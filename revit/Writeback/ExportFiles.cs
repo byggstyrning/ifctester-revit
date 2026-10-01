@@ -30,6 +30,9 @@ public sealed class ExportFileSelection
 
     /// <summary>Set when a file the setup names is missing, so the export lacks what it maps.</summary>
     public string? Warning { get; set; }
+
+    /// <summary>The setup's IFCVersion as the exporter names it (IFC2x3CV2, IFC4, ...). Only GET /ifc-configuration-files sets it.</summary>
+    public string? IfcVersion { get; set; }
 }
 
 /// <summary>The setup and file overrides an export ran with; write-back reads the same files.</summary>

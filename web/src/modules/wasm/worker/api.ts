@@ -37,6 +37,15 @@ export async function getAllEntityClasses(schema: string) {
     return result.toJs({ dict_converter: Object.fromEntries });
 }
 
+export async function getEntityTree(schema: string) {
+    const result = await pyodide.runPythonAsync(`
+        from api import get_entity_tree
+        tree = get_entity_tree("${schema}")
+        tree
+    `);
+    return result.toJs({ dict_converter: Object.fromEntries });
+}
+
 export async function getAllDataTypes(schema: string) {
     const result = await pyodide.runPythonAsync(`
         from api import get_all_data_types
@@ -149,6 +158,7 @@ export const API = {
     "getPredefinedTypes": getPredefinedTypes,
     "getAllEntityClasses": getAllEntityClasses,
     "getAllDataTypes": getAllDataTypes,
+    "getEntityTree": getEntityTree,
     "getEntityAttributes": getEntityAttributes,
     "getApplicablePsets": getApplicablePsets,
     "getMaterialCategories": getMaterialCategories,

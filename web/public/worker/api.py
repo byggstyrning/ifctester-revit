@@ -85,6 +85,26 @@ def get_all_entity_classes(schema_name):
     return entities
 
 
+def get_entity_tree(schema_name):
+    """Every entity of the schema by its canonical name (IfcWallStandardCase), with its supertype,
+    whether it is a type object (a subtype of IfcTypeObject) and whether it is abstract. The pset
+    builder takes entity casing from here: Revit's exporter ignores a set whose entity case is wrong."""
+
+    schema = ifcopenshell.schema_by_name(schema_name)
+    tree = {}
+    for entity in schema.entities():
+        supertype = entity.supertype()
+        is_type = False
+        current = entity
+        while current is not None:
+            if current.name() == "IfcTypeObject":
+                is_type = True
+                break
+            current = current.supertype()
+        tree[entity.name()] = [supertype.name() if supertype else None, is_type, entity.is_abstract()]
+    return tree
+
+
 def get_all_data_types(schema_name):
     """Get all data types in the given schema."""
 

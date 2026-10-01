@@ -82,7 +82,11 @@ public sealed class ExportMapping
     public static ExportFileSelection? DescribeFiles(Document document, string configurationName)
     {
         var configuration = FindConfiguration(document, configurationName);
-        return configuration == null ? null : DescribeFiles(configuration, configurationName, null, null);
+        if (configuration == null) return null;
+        var selection = DescribeFiles(configuration, configurationName, null, null);
+        // The setup's IFC schema (IFCVersion: IFC2x3CV2, IFC4, IFC4RV, ...), for the pset builder's default
+        selection.IfcVersion = configuration.GetType().GetProperty("IFCVersion")?.GetValue(configuration)?.ToString();
+        return selection;
     }
 
     /// <summary>The files an export with this exporter configuration object and these overrides reads.</summary>

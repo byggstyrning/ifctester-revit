@@ -27,6 +27,7 @@ Outputs to `dist/` folder.
 - **IFC Validation**: Validate IFC models against IDS requirements using WebAssembly/Pyodide
 - **Revit Integration**: Select elements in Revit directly from validation reports
 - **Revit Write-back**: Type the correct value next to a failed element and apply it to the open Revit model
+- **Pset builder**: Build the Revit user-defined property set file for an IDS from the IDS and the open model
 - **Browser-Based**: Runs entirely in the browser - no server required
 
 ## Revit Integration
@@ -93,6 +94,53 @@ in place of an input. Pending changes belong to one audit and are dropped when i
 The code is in `src/modules/api/writeback.svelte.ts` (state and the two API calls) and
 `src/components/writeback/`.
 
+### Pset builder
+
+The IDS says which property sets and properties a delivery must contain; a Revit user-defined property
+set file only says which Revit parameter each of them is read from. The **Pset builder** mode (next to
+Editor and Viewer, for the active IDS) lets a designer write that file from the IDS and their own model, then
+export with it and audit. The project's official pset files are not used as a reference.
+
+1. **Rows from the IDS**: one row per required `Property` facet whose property set and name are simple values,
+   merged across specifications. The data type comes from `@dataType` (`IFCLABEL` gives `Label`,
+   `IFCPOSITIVELENGTHMEASURE` `PositiveLength`, every type the exporter knows); without one the row gets `Label`
+   and is marked. The entities come from the specification's applicability entity facets, with their names
+   taken from the IFC schema (IFC2X3 or IFC4, picked in the builder; default: the selected export setup's
+   schema, otherwise IFC2X3). Entity names the schema lacks are flagged. What cannot become a row is listed
+   under *Not covered* with the reason: attribute, classification, material and part-of requirements,
+   a restriction or pattern on the property set or name, prohibited properties, and applicability by more
+   than an entity (the set then applies to all elements of the entity).
+2. **Suggest from model** (`POST /pset-suggestions`): for each row, the Revit parameters the exporter would read
+   it from by name (spaces and case ignored, as the exporter does), then `<Pset>.<Property>`; nothing when
+   nothing matches, never a fuzzy guess. Only elements whose IFC class is one of the row's entities are
+   scanned (IfcExportAs, then the document's IFC category mapping); when none is found every model element
+   is, and the row says so. The row shows the parameter, instance or type, the coverage and a warning
+   for a project parameter (Revit 2025 and 2026 export them, checked in real exports; older versions
+   were not checked), a read-only parameter or low coverage.
+   Unmapped rows are red. A type parameter moves the row to the type entity (`IfcWall` becomes `IfcWallType`,
+   `IfcDoorStyle` in IFC2X3), because the exporter applies a set to the entities it lists and ignores the I/T
+   column.
+3. **Editing**: type a parameter or pick one of the model's (`GET /model-parameters`), or `BuiltInParameter.X`;
+   *+ fallback* adds a parameter that becomes a repeated line (the exporter's fallback chain); I/T switches
+   instance and type; the entity list and data type can be edited; the checkbox leaves a row out. Rows the user
+   edited are not overwritten by a later *Suggest from model*.
+4. **Generate**: the preview shows the file: one `PropertySet:` block per property set, instance/type and entity
+   list, tab separated, CRLF, with a header naming the IDS and the date. An unmapped row is written as a
+   comment (`#<TAB>Name<TAB>Type<TAB>(no Revit parameter)`) so the gap shows; a row without entities is not written.
+5. **Save and use**: *Save* writes it on the Revit machine (`POST /pset-files/save`, UTF-8 without BOM like the
+   project's pset files; default `%LOCALAPPDATA%\IfcTesterRevit\psets\<IDS title> pset.txt`, the path is
+   editable, an existing file is only replaced after *Overwrite*). *Use for next export* saves and sets the
+   property set file override, so the next *Export IFC* uses it. *Download* works without Revit.
+6. **Keep work**: the rows are kept in localStorage per IDS title and version. *Open pset file...* reads an
+   existing file into the table (the matching rows take its mappings, other properties are added as rows).
+
+Without an add-in that reports `"pset-builder"`, the builder opens for drafting: Suggest, Save and Use for next
+export are hidden; Open, Download and the preview work.
+
+The code is in `src/modules/psetBuilder/psetFile.ts` (IDS to rows, generator, parser, no UI),
+`src/modules/api/psetBuilder.svelte.ts` (state, API calls, persistence) and `src/pages/Home/PsetBuilder.svelte`.
+Entity names come from `get_entity_tree` in `public/worker/api.py`.
+
 ## Project Structure
 
 ```
@@ -151,6 +199,7 @@ Covers the web app / Pyodide / ifctester side only (not the Revit or ArchiCAD co
 | In-browser audit | `bash scripts/download-packages.sh && npx playwright install chromium && npm run test:e2e` | real worker (Pyodide + wasm ifcopenshell + ifctester); must reproduce the native reference |
 | Revit write-back | same `npm run test:e2e` (`tests/e2e/writeback.spec.ts`) | the real UI against a mocked Revit API (Playwright route interception); asserts the bodies sent to `/resolve-parameters` and `/apply-changes` |
 | Pset file override | same `npm run test:e2e` (`tests/e2e/export-overrides.spec.ts`) | mocked Revit API; asserts `psetFile` in the `/export-ifc` and `/resolve-parameters` bodies, the status line and the override labels, and that an older add-in gets no controls |
+| Pset builder | same `npm run test:e2e` (`tests/e2e/pset-builder.spec.ts`) | the generator against the real schemas (entity casing, instance/type split, fallbacks, data types, round trip through the parser), and the UI against a mocked Revit API: suggestions, editing, save with overwrite, use for the next export, kept work, and an older add-in |
 
 Fixtures live in `tests/fixtures` (IFC4 + IFC2X3 model, IDS files covering every facet type, prohibited and optional specs).
 After an intentional ifctester behaviour change regenerate the expectations with
