@@ -516,8 +516,16 @@ html, body {
 }
 
 
+/* Top level: nested inside .main-panel it made the build drop the .main-panel declarations */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
 .main-panel {
     flex: 1;
+    /* Without this the flex item grows to its widest table and pushes the right-hand columns off-screen */
+    min-width: 0;
     padding: 24px;
     overflow-y: auto;
 
@@ -588,11 +596,6 @@ html, body {
     
     .validate-btn .spinner {
         animation: spin 1s linear infinite;
-    }
-    
-    @keyframes spin {
-        from { transform: rotate(0deg); }
-        to { transform: rotate(360deg); }
     }
     
     .validation-preview {

@@ -670,7 +670,7 @@
                                                                                             <th>GlobalId</th>
                                                                                             <th>Tag</th>
                                                                                             {#if fixTarget}
-                                                                                                <th>Fix in Revit</th>
+                                                                                                <th class="fix-column">Fix in Revit</th>
                                                                                             {/if}
                                                                                         </tr>
                                                                                     </thead>
@@ -1334,6 +1334,14 @@
     .entity-table td.fix-column {
         max-width: none;
         overflow: visible;
+    }
+
+    /* Keep the fix column in view when the table scrolls sideways */
+    .entity-table .fix-column {
+        position: sticky;
+        right: 0;
+        background: #262626;
+        box-shadow: -1px 0 0 #5555556e;
     }
 
     .entity-table .more-row td {
