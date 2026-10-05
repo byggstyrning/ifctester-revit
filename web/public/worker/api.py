@@ -229,6 +229,51 @@ def get_standard_classification_systems():
     }
 
 
+ELEMENT_ATTRIBUTES = ("Name", "Description", "ObjectType", "Tag", "PredefinedType", "LongName")
+
+
+def get_element_properties(ifc, global_id):
+    """One element of a loaded model as JSON: its attributes and its own property and quantity sets,
+    and those of its type kept apart, so the page can tell where a value comes from. Values that are
+    not text, numbers or booleans are given as text."""
+    import json
+    import ifcopenshell.util.element
+
+    schema = getattr(ifc, "schema_identifier", None) or ifc.schema
+    try:
+        element = ifc.by_guid(global_id)
+    except RuntimeError:
+        return json.dumps({"found": False, "schema": schema})
+
+    def describe(entity):
+        attributes = {}
+        for name in ELEMENT_ATTRIBUTES:
+            try:
+                value = getattr(entity, name)
+            except AttributeError:
+                continue
+            if value is not None:
+                attributes[name] = value
+
+        def sets(**kwargs):
+            found = ifcopenshell.util.element.get_psets(entity, should_inherit=False, **kwargs)
+            return {name: {k: v for k, v in props.items() if k != "id"} for name, props in found.items()}
+
+        return {
+            "ifcClass": entity.is_a(),
+            "globalId": getattr(entity, "GlobalId", None),
+            "attributes": attributes,
+            "psets": sets(psets_only=True),
+            "qtos": sets(qtos_only=True),
+        }
+
+    result = {"found": True, "schema": schema, **describe(element), "type": None}
+    element_type = ifcopenshell.util.element.get_type(element)
+    if element_type is not None and element_type != element:
+        result["type"] = describe(element_type)
+    return json.dumps(result, default=str)
+
+
 def ids_from_xml_string(xml: str, validate: bool = False) -> Ids:
     try:
         decode = get_schema().decode(

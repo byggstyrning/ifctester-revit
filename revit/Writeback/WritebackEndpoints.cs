@@ -86,6 +86,70 @@ public sealed class WritebackEndpoints
             ModelParameterScan.Suggest(app.ActiveUIDocument?.Document, request));
     }
 
+    /// <summary>
+    /// POST /element-parameters: every parameter of one element and its type, and where each line
+    /// of the export setup's mapping files reads its value on that element. Reads only.
+    /// </summary>
+    public Task<WritebackHttpResult> ElementParameters(string body)
+    {
+        return Handle<ElementParametersRequest, ElementParametersResponse>(body, r => !string.IsNullOrWhiteSpace(r.GlobalId) || r.ElementId != null, "globalId", (app, request) =>
+        {
+            var document = app.ActiveUIDocument?.Document;
+            var settings = ExportRequestSettings.ForResolve(
+                new ResolveRequest { Configuration = request.Configuration, PsetFile = request.PsetFile, ParameterMappingFile = request.ParameterMappingFile },
+                _lastExport());
+            var mapping = document == null
+                ? ExportMapping.None
+                : ExportMapping.Load(document, settings.Configuration, settings.PsetFile, settings.ParameterMappingFile);
+            if (request.PsetFileContent != null &&
+                (string.IsNullOrWhiteSpace(request.PsetFileContentFor) ||
+                 string.Equals(request.PsetFileContentFor, mapping.PsetFile, StringComparison.OrdinalIgnoreCase)))
+            {
+                var name = mapping.PsetFile != null ? Path.GetFileName(mapping.PsetFile) : "pset file";
+                mapping = mapping.WithPsetContent(request.PsetFileContent, $"{name} (unsaved edits)");
+            }
+            return ElementInspection.Inspect(document, request, mapping);
+        });
+    }
+
+    /// <summary>
+    /// GET /pset-files/read?path=: the text of an existing .txt property set file, for editing on
+    /// the page. Refuses a file that is not valid UTF-8, because editing it here and saving it back
+    /// as UTF-8 would garble its å, ä and ö. Plain file IO, not on the Revit thread.
+    /// </summary>
+    public static async Task<WritebackHttpResult> ReadPsetFile(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path) ||
+            !string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase))
+        {
+            return WritebackHttpResult.Error(400, "'path' must be the full path of a .txt file");
+        }
+
+        try
+        {
+            // A network folder can take long to answer; keep it off the listener thread
+            var bytes = await Task.Run(() => File.Exists(path) ? File.ReadAllBytes(path) : null).ConfigureAwait(false);
+            if (bytes == null) return WritebackHttpResult.Error(404, $"The file does not exist: {path}");
+
+            var bom = bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF;
+            string content;
+            try
+            {
+                content = new System.Text.UTF8Encoding(false, throwOnInvalidBytes: true).GetString(bytes, bom ? 3 : 0, bytes.Length - (bom ? 3 : 0));
+            }
+            catch (System.Text.DecoderFallbackException)
+            {
+                return WritebackHttpResult.Error(422, $"{Path.GetFileName(path)} is not UTF-8 (probably ANSI), so it cannot be edited here without garbling its characters.");
+            }
+
+            return WritebackHttpResult.Ok(new PsetFileReadResponse { Path = path!, Content = content, Bom = bom });
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return WritebackHttpResult.Error(500, $"The file could not be read: {ex.Message}");
+        }
+    }
+
     /// <summary>POST /pset-files/save: writes a generated pset file. Plain file IO, not on the Revit thread.</summary>
     public static async Task<WritebackHttpResult> SavePsetFile(string body, string defaultFolder)
     {

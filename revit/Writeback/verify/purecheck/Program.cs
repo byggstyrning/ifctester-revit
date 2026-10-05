@@ -56,12 +56,18 @@ Check("attribute mapping", Show(m.FindAttribute("Description")), "Comments i=Tru
 Check("unknown", m.Find("Example", "Nope").Count, 0);
 Check("header with 3 columns is not a set", Show(m.Find("Attribute Mapping", "Orphan")), "Should attach to the previous set i=True t=False");
 Check("entry count (a 3-column header line reads as a property line, as in the exporter)", m.Entries.Count, 10);
+Check("set entities", string.Join(",", m.Find("Example", "StoreyName")[0].Entities), "IfcElement,IfcElementType");
+Check("set entities per set", string.Join(",", m.Find("TypeOnly", "Fire")[0].Entities), "IfcWallType,IfcDoorStyle");
+Check("pset file origin", m.Find("Example", "Mark")[0].Origin, MappingOrigin.PsetFile);
+Check("line, header and data type", string.Join(" | ", m.Find("Example", "Etapp").Select(e => $"{e.LineNumber}/{e.HeaderLineNumber} {e.DataType}")), "4/2 LABEL | 7/6 LABEL");
+Check("data type without third column", m.Find("Example", "NoThirdColumn")[0].DataType, "Text");
 
 // PsetMapping: parameter mapping table
 var t = new PsetMapping();
 t.ReadParameterMappingTable(new[] { "# c", "Pset_WallCommon\tFireRating\tBrandklass", "two\tcolumns", "", "a\tb\tc\td" });
 Check("table", Show(t.Find("Pset_WallCommon", "FireRating")), "Brandklass i=True t=True");
 Check("table count", t.Entries.Count, 1);
+Check("table origin and no entities", $"{t.Entries[0].Origin} {t.Entries[0].Entities.Count}", $"{MappingOrigin.MappingTable} 0");
 
 // ValueParsing
 Check("int", ValueParsing.TryParseInteger(" 42 ", out var i) && i == 42, true);

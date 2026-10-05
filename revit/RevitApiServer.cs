@@ -1294,6 +1294,15 @@ public class RevitApiServer : IDisposable
             {
                 await HandleWriteback(request, response, _writeback.PsetSuggestions);
             }
+            else if (path == "/element-parameters" && method == "POST")
+            {
+                await HandleWriteback(request, response, _writeback.ElementParameters);
+            }
+            else if (path == "/pset-files/read" && method == "GET")
+            {
+                var psetPath = request.QueryString["path"];
+                await HandleWriteback(request, response, _ => Writeback.WritebackEndpoints.ReadPsetFile(psetPath));
+            }
             else if (path == "/pset-files/save" && method == "POST")
             {
                 await HandleWriteback(request, response, body => Writeback.WritebackEndpoints.SavePsetFile(body, PsetSaveFolder));
@@ -1417,7 +1426,7 @@ public class RevitApiServer : IDisposable
             connected = true,
             configsReady = configsReady,
             version = "1.4.0",
-            capabilities = new[] { "writeback", "export-overrides", "pset-builder" }
+            capabilities = new[] { "writeback", "export-overrides", "pset-builder", "element-inspector" }
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(status);

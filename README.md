@@ -175,10 +175,13 @@ Both plugins expose a local HTTP API for communication with the web interface:
 | `/model-parameters` | GET | Revit only: every parameter on the model elements and their types: instance/type, element counts, categories, storage type, shared/project/family/built-in, read-only, how many have a value. Read-only |
 | `/pset-suggestions` | POST | Revit only: for `{ propertySet, name, entities[] }` items, the parameters the exporter would read by name, with coverage |
 | `/pset-files/save` | POST | Revit only: write a generated pset file (`{ path?, name?, content, overwrite }`); 409 when it exists and `overwrite` is false |
+| `/element-parameters` | POST | Revit only: for `{ globalId, elementId? }`, every instance and type parameter of the element, and each line of the export setup's mapping files (with its line number) and the parameters it reads on that element. `psetFileContent` / `psetFileContentFor` read an unsaved draft in place of that pset file. Read-only |
+| `/pset-files/read?path=` | GET | Revit only: the text of a `.txt` pset file for editing; 422 when it is not UTF-8 |
 
-The write-back endpoints, the property set file override and the pset builder are described in
-[web/README.md](web/README.md#property-set-file-override). `GET /status` lists `capabilities` (`writeback`,
-`export-overrides`, `pset-builder`) so the page only shows controls the add-in supports.
+The write-back endpoints, the property set file override, the pset builder and the element inspector are
+described in [web/README.md](web/README.md#property-set-file-override). `GET /status` lists `capabilities`
+(`writeback`, `export-overrides`, `pset-builder`, `element-inspector`) so the page only shows controls the
+add-in supports.
 
 **Default Ports:**
 - Revit: `48881`

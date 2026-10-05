@@ -18,7 +18,35 @@ public sealed class ExportMapping
     public List<string> Files { get; } = new();
     public string? Note { get; set; }
 
+    /// <summary>The user-defined property set file and the parameter mapping table that were read, if any.</summary>
+    public string? PsetFile { get; private set; }
+    public string? ParameterMappingFile { get; private set; }
+
     public static ExportMapping None => new();
+
+    /// <summary>
+    /// The same setup with the property set file's content replaced by a draft that is not saved
+    /// yet. The parameter mapping table is read again from its file.
+    /// </summary>
+    public ExportMapping WithPsetContent(string content, string label)
+    {
+        var mapping = new ExportMapping
+        {
+            UseTypePropertiesInInstancePsets = UseTypePropertiesInInstancePsets,
+            Configuration = Configuration,
+            Note = Note,
+            PsetFile = PsetFile ?? label,
+            ParameterMappingFile = ParameterMappingFile
+        };
+        mapping.Mapping.ReadUserDefinedPsets(content.Replace("\r\n", "\n").Split('\n'));
+        mapping.Files.Add(label);
+        if (ParameterMappingFile != null && File.Exists(ParameterMappingFile))
+        {
+            mapping.Mapping.ReadParameterMappingTable(File.ReadAllLines(ParameterMappingFile));
+            mapping.Files.Add(ParameterMappingFile);
+        }
+        return mapping;
+    }
 
     /// <summary>Reads mapping files directly. Either path may be null.</summary>
     public static ExportMapping FromFiles(string? userDefinedPsetFile, string? parameterMappingTable, bool useTypePropertiesInInstancePsets = false)
@@ -28,11 +56,13 @@ public sealed class ExportMapping
         {
             mapping.Mapping.ReadUserDefinedPsets(File.ReadAllLines(userDefinedPsetFile));
             mapping.Files.Add(userDefinedPsetFile!);
+            mapping.PsetFile = userDefinedPsetFile;
         }
         if (!string.IsNullOrEmpty(parameterMappingTable))
         {
             mapping.Mapping.ReadParameterMappingTable(File.ReadAllLines(parameterMappingTable));
             mapping.Files.Add(parameterMappingTable!);
+            mapping.ParameterMappingFile = parameterMappingTable;
         }
         return mapping;
     }
@@ -112,11 +142,13 @@ public sealed class ExportMapping
         {
             Mapping.ReadUserDefinedPsets(File.ReadAllLines(selection.PsetFile));
             Files.Add(selection.PsetFile);
+            PsetFile = selection.PsetFile;
         }
         if (selection.ParameterMappingFile != null && selection.ParameterMappingFileExists)
         {
             Mapping.ReadParameterMappingTable(File.ReadAllLines(selection.ParameterMappingFile));
             Files.Add(selection.ParameterMappingFile);
+            ParameterMappingFile = selection.ParameterMappingFile;
         }
     }
 

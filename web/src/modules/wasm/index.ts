@@ -256,6 +256,13 @@ class WASMModule extends EventEmitter {
     }
 
     /**
+     * One element of a loaded IFC file: attributes, property and quantity sets, and its type's
+     */
+    async getElementProperties(ifcId: string, globalId: string) {
+        return this._apiCall('getElementProperties', ifcId, globalId);
+    }
+
+    /**
      * Open an existing IDS from XML string
      */
     async openIDS(idsXml: string, validate = false) {
@@ -361,6 +368,7 @@ export const {
     loadIfc,
     unloadIfc,
     auditIfc,
+    getElementProperties,
     createIDS,
     openIDS,
     createSpecification,

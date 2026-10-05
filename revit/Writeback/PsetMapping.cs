@@ -19,6 +19,25 @@ public sealed class MappedParameter
 
     /// <summary>The set lists at least one type entity (IfcWallType, IfcTypeObject, ...).</summary>
     public bool OnType { get; set; }
+
+    /// <summary>The entities the set's header line lists, as written. Empty for a mapping table line.</summary>
+    public List<string> Entities { get; set; } = new();
+
+    /// <summary>"pset-file" for a user-defined property set file, "mapping-table" for a parameter mapping table.</summary>
+    public string Origin { get; set; } = MappingOrigin.PsetFile;
+
+    /// <summary>The line in its file, 1-based, and the line of its set's PropertySet: header (0 for a mapping table).</summary>
+    public int LineNumber { get; set; }
+    public int HeaderLineNumber { get; set; }
+
+    /// <summary>The data type column as written (LABEL, Text, Length, ...); empty for a mapping table line.</summary>
+    public string DataType { get; set; } = "";
+}
+
+public static class MappingOrigin
+{
+    public const string PsetFile = "pset-file";
+    public const string MappingTable = "mapping-table";
 }
 
 /// <summary>
@@ -52,9 +71,13 @@ public sealed class PsetMapping
         string? setName = null;
         var onInstance = false;
         var onType = false;
+        var setEntities = new List<string>();
+        var headerLine = 0;
+        var lineNumber = 0;
 
         foreach (var rawLine in lines)
         {
+            lineNumber++;
             var line = rawLine.TrimStart(' ', '\t');
             if (line.Length == 0 || line[0] == '#') continue;
 
@@ -67,6 +90,8 @@ public sealed class PsetMapping
                 // lists, so the entity names decide between instance and type.
                 onType = entities.Any(IsTypeEntity);
                 onInstance = entities.Length == 0 || entities.Any(e => !IsTypeEntity(e));
+                setEntities = entities.ToList();
+                headerLine = lineNumber;
             }
             else if (parts.Length >= 2 && setName != null)
             {
@@ -75,7 +100,11 @@ public sealed class PsetMapping
                     PropertySet = setName,
                     PropertyName = parts[0].Trim(),
                     OnInstance = onInstance,
-                    OnType = onType
+                    OnType = onType,
+                    Entities = setEntities,
+                    LineNumber = lineNumber,
+                    HeaderLineNumber = headerLine,
+                    DataType = parts[1].Trim()
                 };
 
                 const string builtInPrefix = "BuiltInParameter.";
@@ -102,8 +131,10 @@ public sealed class PsetMapping
     /// </summary>
     public void ReadParameterMappingTable(IEnumerable<string> lines)
     {
+        var lineNumber = 0;
         foreach (var line in lines)
         {
+            lineNumber++;
             if (line.Length == 0 || line[0] == '#') continue;
 
             var parts = line.Split(new[] { '\t' }, StringSplitOptions.RemoveEmptyEntries);
@@ -111,11 +142,13 @@ public sealed class PsetMapping
 
             _entries.Add(new MappedParameter
             {
+                LineNumber = lineNumber,
                 PropertySet = parts[0].Trim(),
                 PropertyName = parts[1].Trim(),
                 ParameterName = parts[2].Trim(),
                 OnInstance = true,
-                OnType = true
+                OnType = true,
+                Origin = MappingOrigin.MappingTable
             });
         }
     }

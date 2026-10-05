@@ -52,6 +52,9 @@ export const EXPORT_OVERRIDES = 'export-overrides';
 /** The add-in can scan the model's parameters, suggest pset mappings and save pset files (GET /status capabilities). */
 export const PSET_BUILDER = 'pset-builder';
 
+/** The add-in can list one element's parameters and how the export's mapping files read them (GET /status capabilities). */
+export const ELEMENT_INSPECTOR = 'element-inspector';
+
 // Revit connection state
 /** @type {RevitState} */
 export const Revit = $state({
@@ -447,6 +450,22 @@ export const getPsetSuggestions = (items) => requestJson('POST', '/pset-suggesti
  * @returns {Promise<{ path: string, overwritten: boolean, bytes: number }>}
  */
 export const savePsetFile = (request) => requestJson('POST', '/pset-files/save', request, 30000);
+
+/**
+ * One element's instance and type parameters, and what each line of the export setup's mapping
+ * files reads on it. Read-only. A GlobalId lookup scans the whole model, so allow it time.
+ * @param {{ globalId: string, elementId?: number, configuration?: string, psetFile?: string, parameterMappingFile?: string }} request
+ * @returns {Promise<import('./inspector.svelte').RevitElement>}
+ */
+export const getElementParameters = (request) => requestJson('POST', '/element-parameters', request, 120000);
+
+/**
+ * The text of a property set file on the Revit machine, for editing. Throws with `status` 422 when
+ * the file is not UTF-8.
+ * @param {string} path
+ * @returns {Promise<{ path: string, content: string, bom: boolean }>}
+ */
+export const readPsetFile = (path) => requestJson('GET', `/pset-files/read?path=${encodeURIComponent(path)}`, undefined, 30000);
 
 /**
  * The property set file and mapping table a setup exports with, so the page can show its default.

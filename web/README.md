@@ -94,6 +94,64 @@ in place of an input. Pending changes belong to one audit and are dropped when i
 The code is in `src/modules/api/writeback.svelte.ts` (state and the two API calls) and
 `src/components/writeback/`.
 
+### Element inspector
+
+The second button in the *Select* column of the audit tables opens the element in a panel on the right: its
+IFC attributes and property sets next to the Revit parameters they come from, joined by the export setup's
+property set file. Opened from a requirement, the panel scrolls to the property that requirement checks.
+
+The two sides show next to each other, IFC in blue on the left and Revit in amber on the right, under one
+filter. Hovering a row lights up its partner on the other side; clicking a parameter name jumps to it. The
+panel is resized by dragging its left edge (the width is remembered in the browser).
+
+- **IFC**: one row per IFC property of the element and its type (read from the loaded IFC with
+  `get_element_properties` in `public/worker/api.py`), and one per mapping-file line that reaches the element
+  without a property in the IFC. A line reaches the element when its set lists the element's IFC class or a
+  supertype of it (`IfcElement` reaches `IfcWall`), or its type's. Each row shows the IFC value, the Revit
+  parameter(s) the line reads (instance `I` or type `T`, a repeated line's fallbacks dimmed) and their values,
+  and a status named by its cause: *Exported*, *Differs* (a text parameter holds another value than the IFC),
+  *No parameter in Revit* (the pset file reads a parameter the element and its type lack), *Empty in Revit*,
+  *Not exported* (Revit has a value the IFC lacks: an older export, or another pset file), *Entity case*
+  (the set names the class in the wrong case, which the exporter skips silently) and *Not in pset file*
+  (the property came from elsewhere, such as Revit's own sets).
+- **Revit**: every instance and type parameter by group, with shared and read-only marked, and the IFC
+  properties each one feeds. *Mapped only* keeps the parameters the mapping files read.
+
+Revit is asked with `POST /element-parameters`, with the export setup and property set file override the
+audited export was made with, as write-back does. Without an add-in that reports `"element-inspector"`, the
+panel shows the IFC side only.
+
+**Linking (editing the pset file).** Click a property on the IFC side and a parameter on the Revit side;
+the bar at the bottom says what would change, then *Link* does it:
+
+- a property with a line in the file gets that line's parameter column rewritten (the first line of a
+  fallback chain); a property without one gets a new line, with a data type to pick, in a set of the same
+  name that already reaches the element. Nothing else in the file changes: tabs, comments and line ends stay.
+- a built-in parameter is written as `BuiltInParameter.<NAME>`, which does not depend on Revit's language.
+- a set that also lists other classes is split by default (*Only IfcWindow*): the element's class leaves
+  the set's header and gets its own copy of the whole set, with the change, right after it, marked by a
+  comment; the other classes keep the set as it was. *All N classes in the set* changes the shared line
+  instead. A class that is in the set only through a supertype (`IfcElement`) cannot be split off, because a
+  set cannot leave one subclass out; the bar says so.
+- *One set per class* (next to the file name) rewrites the whole draft that way at once: every set listing
+  several classes becomes one set per class with a copy of its lines, so every later link changes one class
+  only. Sets with one class, comments and lines before the first set stay.
+- warnings: a type parameter goes into a set without type entities while the setup's *Use type properties
+  in instance property sets* is off, the parameter is empty.
+- a set whose entity is in the wrong case gets a *Fix case* button that rewrites its header.
+
+The edits collect in a draft of the file (`GET /pset-files/read`; a file that is not UTF-8 is refused, since
+saving it as UTF-8 would garble å, ä and ö). Revit reads the draft in place of the file, so the panel shows
+the effect at once: a fixed property typically turns *Not exported* until the next export. *Review* lists
+each line old and new, *Undo* takes the last edit back, and *Save* writes the draft next to the original as
+`<name>-edited.txt` (or any path; replacing an existing file is confirmed) with `POST /pset-files/save`.
+*Use for next export* sets it as the toolbar's property set file override, so *Export IFC* and *Run Audit*
+check the result.
+
+The code is in `src/modules/api/inspector.svelte.ts` (state, API calls, the join and link planning, no UI),
+`src/modules/api/psetDraft.svelte.ts` (the draft), `src/modules/psetBuilder/psetEdit.ts` (line edits) and
+`src/components/inspector/ElementInspector.svelte`.
+
 ### Pset builder
 
 The IDS says which property sets and properties a delivery must contain; a Revit user-defined property

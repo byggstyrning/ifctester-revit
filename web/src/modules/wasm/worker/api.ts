@@ -153,6 +153,14 @@ export async function auditIfc(ifcId: string, idsData: number[] | Uint8Array | A
     };
 }
 
+export async function getElementProperties(ifcId: string, globalId: string) {
+    const ifc = LoadedIFC.get(ifcId);
+    if (!ifc) throw new Error("The IFC model is no longer loaded");
+
+    const api = pyodide.pyimport("api");
+    return JSON.parse(api.get_element_properties(ifc, globalId));
+}
+
 // Expose interface
 export const API = {
     "getPredefinedTypes": getPredefinedTypes,
@@ -165,5 +173,6 @@ export const API = {
     "getStandardClassificationSystems": getStandardClassificationSystems,
     "loadIfc": loadIfc,
     "unloadIfc": unloadIfc,
-    "auditIfc": auditIfc
+    "auditIfc": auditIfc,
+    "getElementProperties": getElementProperties
 };

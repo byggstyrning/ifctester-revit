@@ -90,6 +90,20 @@ public sealed class ParameterResolver
     }
 
     /// <summary>
+    /// The parameters one line of a mapping file points at on the element and its type, without the
+    /// name-match fallbacks of <see cref="ForProperty"/>.
+    /// </summary>
+    public List<ParameterCandidate> ForMappedLine(Element element, Element? type, MappedParameter mapped, bool useTypePropertiesInInstancePsets)
+    {
+        var candidates = new CandidateList();
+        AddMapped(candidates, element, type, mapped, mapped.OnInstance, mapped.OnType || useTypePropertiesInInstancePsets);
+        return candidates.Items;
+    }
+
+    /// <summary>The element's visible parameters, in the order the exporter prefers them.</summary>
+    public IReadOnlyList<Parameter> VisibleParameters(Element target) => Ordered(target);
+
+    /// <summary>
     /// The parameter a candidate named, looked up again by its exact name. With several of that
     /// name the first writable one is taken, in the order the candidates were listed.
     /// </summary>

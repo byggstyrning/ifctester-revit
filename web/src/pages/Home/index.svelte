@@ -10,6 +10,7 @@
     import RequirementsPanel from "./RequirementsPanel.svelte";
     import IdsViewer from "./IdsViewer.svelte";
     import PsetBuilder from "./PsetBuilder.svelte";
+    import ElementInspector from "$src/components/inspector/ElementInspector.svelte";
     import SplashScreen from "$src/components/SplashScreen.svelte";
     import { Toaster } from "$lib/components/ui/sonner";
     import { error, success } from "$src/modules/utils/toast.svelte";
@@ -274,6 +275,9 @@
                     {/if}
                 {/if}
             </div>
+            {#if documentState?.viewMode === 'viewer'}
+                <ElementInspector />
+            {/if}
         </div>
     </div>
     </div>

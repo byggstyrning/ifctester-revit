@@ -10,7 +10,8 @@
     import FixCell from "$src/components/writeback/FixCell.svelte";
     import FixAllControl from "$src/components/writeback/FixAllControl.svelte";
     import PendingChanges from "$src/components/writeback/PendingChanges.svelte";
-    import type { AuditReport, AuditReportData } from "$src/types/report";
+    import * as Inspector from "$src/modules/api/inspector.svelte";
+    import type { AuditReport, AuditReportData, AuditReportEntity, AuditRequirement } from "$src/types/report";
     import type { DocumentState, Facet, IdsDocument, Specification } from "$src/types/ids";
 
     let activeDocument = $derived(
@@ -198,6 +199,17 @@
         ArchiCAD.enabled && ArchiCAD.connected ? 'ArchiCAD' :
         Revit.enabled && Revit.connected ? 'Revit' : null
     );
+
+    // Opens the element in the inspector; from a requirement, at the property that requirement checks
+    function inspectEntity(entity: AuditReportEntity, requirement: AuditRequirement | null = null) {
+        if (!auditReport) return;
+        const target = requirement ? Writeback.getWritebackTarget(requirement) : null;
+        const focus = target?.supported ? { propertySet: target.propertySet, name: target.name } : null;
+        Inspector.inspect(entity, auditReport.modelId, focus);
+    }
+
+    const isInspected = (entity: AuditReportEntity) =>
+        Inspector.Inspector.open && !!entity.global_id && Inspector.Inspector.globalId === entity.global_id;
 
     // Fixing failures from here needs a connected Revit add-in that reports the write-back capability
     const writebackAvailable = $derived(Writeback.isAvailable());
@@ -514,9 +526,7 @@
                                                     <table class="entity-table">
                                                         <thead>
                                                             <tr>
-                                                                {#if isBimToolConnected}
-                                                                    <th>Select</th>
-                                                                {/if}
+                                                                <th>{isBimToolConnected ? 'Select' : ''}</th>
                                                                 <th>Class</th>
                                                                 <th>PredefinedType</th>
                                                                 <th>Name</th>
@@ -529,8 +539,8 @@
                                                         <tbody>
                                                             {#each specReport.applicable_entities.slice(0, 10) as entity}
                                                                 <tr>
-                                                                    {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
-                                                                        <td>
+                                                                    <td class="select-cell">
+                                                                            {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
                                                                             <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in {activeBimToolName || 'BIM tool'}">
                                                                                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                                     <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -538,10 +548,13 @@
                                                                                     <line x1="12" y1="22.08" x2="12" y2="12"/>
                                                                                 </svg>
                                                                             </button>
+                                                                            {/if}
+                                                                            {#if entity.global_id && entity.global_id !== '-'}
+                                                                                <button class="select-btn inspect-btn" class:active={isInspected(entity)} onclick={() => inspectEntity(entity, null)} title="Show the IFC properties and the Revit parameters" aria-label="Inspect element">
+                                                                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="M7 8h4M7 12h4M7 16h4"/></svg>
+                                                                                </button>
+                                                                            {/if}
                                                                         </td>
-                                                                    {:else if isBimToolConnected}
-                                                                        <td>-</td>
-                                                                    {/if}
                                                                     <td><CopyableText.Root value={entity.class} /></td>
                                                                     <td><CopyableText.Root value={entity.predefined_type || '-'} /></td>
                                                                     <td><CopyableText.Root value={entity.name || '-'} /></td>
@@ -553,7 +566,7 @@
                                                             {/each}
                                                             {#if specReport.applicable_entities.length > 10}
                                                                 <tr class="more-row">
-                                                                    <td colspan={isBimToolConnected ? 8 : 7}>... {specReport.applicable_entities.length - 10} more failing elements not shown ...</td>
+                                                                    <td colspan="8">... {specReport.applicable_entities.length - 10} more failing elements not shown ...</td>
                                                                 </tr>
                                                             {/if}
                                                         </tbody>
@@ -606,9 +619,7 @@
                                                                                     <table class="entity-table">
                                                                                     <thead>
                                                                                         <tr>
-                                                                                            {#if isBimToolConnected}
-                                                                                                <th>Select</th>
-                                                                                            {/if}
+                                                                                            <th>{isBimToolConnected ? 'Select' : ''}</th>
                                                                                             <th>Class</th>
                                                                                             <th>PredefinedType</th>
                                                                                             <th>Name</th>
@@ -620,8 +631,8 @@
                                                                                     <tbody>
                                                                                         {#each reqAuditData.passed_entities.slice(0, 10) as entity}
                                                                                             <tr>
-                                                                                                {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
-                                                                                                    <td>
+                                                                                                <td class="select-cell">
+                                                                                                        {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
                                                                                                         <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in {activeBimToolName || 'BIM tool'}">
                                                                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                                                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -629,10 +640,13 @@
                                                                                                                 <line x1="12" y1="22.08" x2="12" y2="12"/>
                                                                                                             </svg>
                                                                                                         </button>
+                                                                                                        {/if}
+                                                                                                        {#if entity.global_id && entity.global_id !== '-'}
+                                                                                                            <button class="select-btn inspect-btn" class:active={isInspected(entity)} onclick={() => inspectEntity(entity, reqAuditData)} title="Show the IFC properties and the Revit parameters" aria-label="Inspect element">
+                                                                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="M7 8h4M7 12h4M7 16h4"/></svg>
+                                                                                                            </button>
+                                                                                                        {/if}
                                                                                                     </td>
-                                                                                                {:else if isBimToolConnected}
-                                                                                                    <td>-</td>
-                                                                                                {/if}
                                                                                                 <td><CopyableText.Root value={entity.class} /></td>
                                                                                                 <td><CopyableText.Root value={entity.predefined_type || '-'} /></td>
                                                                                                 <td><CopyableText.Root value={entity.name || '-'} /></td>
@@ -643,7 +657,7 @@
                                                                                         {/each}
                                                                                         {#if reqAuditData.passed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={isBimToolConnected ? 7 : 6}>... {reqAuditData.passed_entities.length - 10} more passing elements not shown ...</td>
+                                                                                                <td colspan="7">... {reqAuditData.passed_entities.length - 10} more passing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>
@@ -665,9 +679,7 @@
                                                                                     <table class="entity-table">
                                                                                     <thead>
                                                                                         <tr>
-                                                                                            {#if isBimToolConnected}
-                                                                                                <th>Select</th>
-                                                                                            {/if}
+                                                                                            <th>{isBimToolConnected ? 'Select' : ''}</th>
                                                                                             <th>Class</th>
                                                                                             <th>PredefinedType</th>
                                                                                             <th>Name</th>
@@ -683,8 +695,8 @@
                                                                                     <tbody>
                                                                                         {#each reqAuditData.failed_entities.slice(0, 10) as entity, rowIndex}
                                                                                             <tr>
-                                                                                                {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
-                                                                                                    <td>
+                                                                                                <td class="select-cell">
+                                                                                                        {#if isBimToolConnected && entity.global_id && entity.global_id !== '-'}
                                                                                                         <button class="select-btn" onclick={() => handleSelectElement(entity.global_id)} title="Select element in {activeBimToolName || 'BIM tool'}">
                                                                                                             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                                                                                                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
@@ -692,10 +704,13 @@
                                                                                                                 <line x1="12" y1="22.08" x2="12" y2="12"/>
                                                                                                             </svg>
                                                                                                         </button>
+                                                                                                        {/if}
+                                                                                                        {#if entity.global_id && entity.global_id !== '-'}
+                                                                                                            <button class="select-btn inspect-btn" class:active={isInspected(entity)} onclick={() => inspectEntity(entity, reqAuditData)} title="Show the IFC properties and the Revit parameters" aria-label="Inspect element">
+                                                                                                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/><path d="M7 8h4M7 12h4M7 16h4"/></svg>
+                                                                                                            </button>
+                                                                                                        {/if}
                                                                                                     </td>
-                                                                                                {:else if isBimToolConnected}
-                                                                                                    <td>-</td>
-                                                                                                {/if}
                                                                                                 <td><CopyableText.Root value={entity.class} /></td>
                                                                                                 <td><CopyableText.Root value={entity.predefined_type || '-'} /></td>
                                                                                                 <td><CopyableText.Root value={entity.name || '-'} /></td>
@@ -712,7 +727,7 @@
                                                                                         {/each}
                                                                                         {#if reqAuditData.failed_entities.length > 10}
                                                                                             <tr class="more-row">
-                                                                                                <td colspan={(isBimToolConnected ? 8 : 7) + (fixTarget ? 1 : 0)}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
+                                                                                                <td colspan={8 + (fixTarget ? 1 : 0)}>... {reqAuditData.failed_entities.length - 10} more failing elements not shown ...</td>
                                                                                             </tr>
                                                                                         {/if}
                                                                                     </tbody>
@@ -1414,6 +1429,26 @@
     .select-btn svg {
         width: 14px;
         height: 14px;
+    }
+
+    .select-cell {
+        white-space: nowrap;
+    }
+
+    .select-cell .select-btn + .select-btn {
+        margin-left: 4px;
+    }
+
+    .inspect-btn {
+        background: #2f3a4a;
+    }
+
+    .inspect-btn:hover {
+        background: #3b4a5e;
+    }
+
+    .inspect-btn.active {
+        background: #2563eb;
     }
 
     .progress-container {
