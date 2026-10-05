@@ -555,12 +555,16 @@ public class ExportIfcEventHandler : IExternalEventHandler
     /// <summary>Why the export failed, when it did.</summary>
     public string? ErrorMessage { get; private set; }
 
+    /// <summary>The exported model as the model memory files it; null for a document never saved.</summary>
+    public Writeback.MemoryModel? Model { get; private set; }
+
     public TaskCompletionSource<bool>? CompletionSource { get; set; }
 
     public void Execute(UIApplication app)
     {
         Files = null;
         ErrorMessage = null;
+        Model = null;
         var hasOverrides = !string.IsNullOrWhiteSpace(PsetFileOverride) || !string.IsNullOrWhiteSpace(ParameterMappingFileOverride);
         var overridesApplied = false;
         try
@@ -580,6 +584,7 @@ public class ExportIfcEventHandler : IExternalEventHandler
 
             var doc = uidoc.Document;
             var view = uidoc.ActiveView;
+            Model = Writeback.ModelMemoryEndpoints.ModelOf(doc);
 
             var fileName = $"Export_{doc.Title}_{DateTime.Now:yyyyMMdd_HHmmss}.ifc";
             OutputFilePath = Path.Combine(tempDir, fileName);
@@ -1092,6 +1097,8 @@ public class RevitApiServer : IDisposable
     // Which web pages may call the API, and which files the page may read through it
     private readonly Writeback.OriginPolicy _origins;
     private readonly Writeback.ReadablePaths _readable = new();
+    // GET/POST /model-memory, POST /ids-files/pick, GET /ids-files/read
+    private readonly Writeback.ModelMemoryEndpoints _memory;
     
     // Export job tracking for async polling
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ExportJob> _exportJobs = new();
@@ -1123,12 +1130,16 @@ public class RevitApiServer : IDisposable
     /// <summary>Where POST /pset-files/save writes a file the request gives no path for. Settable for tests.</summary>
     public string PsetSaveFolder { get; set; } = Writeback.PsetFileWriter.DefaultFolder();
 
+    /// <summary>The per-user memory of choices per model. Settable for tests.</summary>
+    public Writeback.ModelMemoryStore ModelMemory { get; set; } = new(Writeback.ModelMemoryStore.DefaultPath());
+
     public RevitApiServer(int port = 48881)
     {
         _port = port;
         _baseUrl = $"http://localhost:{port}/";
         _origins = Writeback.OriginPolicy.ForServer(port, Environment.GetEnvironmentVariable(Writeback.OriginPolicy.ExtraOriginsVariable));
         _writeback = new Writeback.WritebackEndpoints(_writebackQueue, () => _lastExport, _readable);
+        _memory = new Writeback.ModelMemoryEndpoints(_writebackQueue, () => ModelMemory, _readable);
     }
 
     public bool IsRunning => _isRunning;
@@ -1320,6 +1331,23 @@ public class RevitApiServer : IDisposable
                 var psetPath = request.QueryString["path"];
                 await HandleWriteback(request, response, _ => _writeback.ReadPsetFile(psetPath, PsetSaveFolder));
             }
+            else if (path == "/model-memory" && method == "GET")
+            {
+                await HandleWriteback(request, response, _ => _memory.Get());
+            }
+            else if (path == "/model-memory" && method == "POST")
+            {
+                await HandleWriteback(request, response, _memory.Post);
+            }
+            else if (path == "/ids-files/pick" && method == "POST")
+            {
+                await HandleWriteback(request, response, _ => _memory.Pick());
+            }
+            else if (path == "/ids-files/read" && method == "GET")
+            {
+                var idsPath = request.QueryString["path"];
+                await HandleWriteback(request, response, _ => _memory.Read(idsPath));
+            }
             else if (path == "/pset-files/save" && method == "POST")
             {
                 await HandleWriteback(request, response, body => _writeback.SavePsetFile(body, PsetSaveFolder));
@@ -1443,7 +1471,7 @@ public class RevitApiServer : IDisposable
             connected = true,
             configsReady = configsReady,
             version = "1.4.0",
-            capabilities = new[] { "writeback", "export-overrides", "pset-builder", "element-inspector" }
+            capabilities = new[] { "writeback", "export-overrides", "pset-builder", "element-inspector", "model-memory" }
         };
 
         var json = System.Text.Json.JsonSerializer.Serialize(status);
@@ -1702,6 +1730,7 @@ public class RevitApiServer : IDisposable
                     File.Exists(handler.OutputFilePath))
                 {
                     job.OutputFilePath = handler.OutputFilePath;
+                    _memory.RememberExport(handler.Model?.Key, settings);
                     job.Status = ExportJobStatus.Complete;
                     System.Diagnostics.Debug.WriteLine($"Export job {job.JobId} completed: {job.OutputFilePath}");
                 }

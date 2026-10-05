@@ -72,6 +72,38 @@ controls. A model exported with an override is labelled *Pset override: &lt;file
 the audit results, so it is not mistaken for the delivery export. Against an older add-in the controls stay
 hidden and the export is sent as before.
 
+### Remembered per model
+
+When the add-in reports `"model-memory"` in `GET /status` capabilities, IfcTester remembers per Revit model
+what was last used with it and preselects it the next time the page connects to that model. The *This Model*
+section of the Revit tab shows it, e.g. *Last used for this model: BS-100-63-IDS.ids, IFC HUS 29X,
+BS-100-63-Pset-K.txt [change]*.
+
+- **What**: the IDS file, the IFC export setup, and the property set file and parameter mapping table
+  overrides (none means the setup's own files).
+- **When it is saved**: the IDS when one is opened through the add-in; the setup and overrides when an
+  export from the page completes (the add-in saves them itself).
+- **Where**: per user, in `%LOCALAPPDATA%\IfcTesterRevit\model-memory.json` on the Revit machine (next to
+  the `psets` save folder), the same file for Revit 2025 and 2026. Never in the model: nothing is written
+  to a shared central model. Only paths are kept.
+- **Which model**: a workshared model by its central model's path, so every local copy shares one entry;
+  any other by its file path. A document that has never been saved gets nothing remembered.
+- **On open** (`GET /model-memory`): the add-in checks each remembered file on disk now. The IDS is read
+  again from its path (`GET /ids-files/read`), so a newer version on the share is picked up, and opened
+  as the active document. The setup is selected in the export controls unless one is chosen already, the
+  override files are set unless the page has others. A file that is gone, or a share that does not answer
+  within 10 s, is named in red under the line and left for the user to choose; a setup that is no longer
+  in the model is named under the setup dropdown. Nothing is exported or audited: everything is only
+  preselected.
+- **Opening an IDS**: a browser file picker gives the page a file's content but never its path, so with
+  this capability *Open IDS* (the page's button and the menu) and *change* open Revit's own file dialog
+  (`POST /ids-files/pick`, which returns the path and the content), and the IDS is remembered for the
+  model (`POST /model-memory`). The dialog belongs to Revit, held above other windows. If Revit cannot
+  show it (busy), the browser's picker is used and that IDS is not remembered.
+
+Against an older add-in the section stays hidden, nothing is asked and *Open IDS* uses the browser's
+picker as before.
+
 ### Write-back
 
 When the connected add-in reports `"capabilities": ["writeback"]` in `GET /status`, the failed-elements
@@ -259,6 +291,7 @@ Covers the web app / Pyodide / ifctester side only (not the Revit or ArchiCAD co
 | In-browser audit | `bash scripts/download-packages.sh && npx playwright install chromium && npm run test:e2e` | real worker (Pyodide + wasm ifcopenshell + ifctester); must reproduce the native reference |
 | Revit write-back | same `npm run test:e2e` (`tests/e2e/writeback.spec.ts`) | the real UI against a mocked Revit API (Playwright route interception); asserts the bodies sent to `/resolve-parameters` and `/apply-changes` |
 | Pset file override | same `npm run test:e2e` (`tests/e2e/export-overrides.spec.ts`) | mocked Revit API; asserts `psetFile` in the `/export-ifc` and `/resolve-parameters` bodies, the status line and the override labels, and that an older add-in gets no controls |
+| Remembered per model | same `npm run test:e2e` (`tests/e2e/model-memory.spec.ts`) | mocked Revit API: the remembered IDS, setup and pset file are preselected and nothing is exported; missing files and a removed setup are reported and left to choose; *Open IDS* goes through the add-in's dialog and is remembered; an unsaved model; an older add-in keeps the browser picker |
 | Pset builder | same `npm run test:e2e` (`tests/e2e/pset-builder.spec.ts`) | the generator against the real schemas (entity casing, instance/type split, fallbacks, data types, round trip through the parser), and the UI against a mocked Revit API: suggestions, editing, save with overwrite, use for the next export, kept work, and an older add-in |
 
 Fixtures live in `tests/fixtures` (IFC4 + IFC2X3 model, IDS files covering every facet type, prohibited and optional specs).

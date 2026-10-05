@@ -299,6 +299,32 @@ try:
     status, body = get('/pset-files/read?path=' + escape_query(os.path.join(save_folder, '..', 'not-named.txt')))
     check('read out of the save folder with .. -> 403', status, 403)
 
+    # model memory: keyed by the document's path (this model is not workshared), paths only
+    from IfcTesterRevit.Writeback import ModelMemoryStore
+    memory_file = os.path.join(OUT, 'model-memory-%s.json' % YEAR)
+    if os.path.isfile(memory_file):
+        os.remove(memory_file)
+    server.ModelMemory = ModelMemoryStore(memory_file)
+    status, body = get('/model-memory')
+    log('model-memory ->', status, body)
+    check('model memory: the open model, nothing remembered', (status, '"workshared":false' in body, '"remembered":null' in body, 'wb-model-%s.rvt' % YEAR in body), (200, True, True, True))
+    ids_file = os.path.join(OUT, u'spec ' + unichr(0xe5) + unichr(0xe4) + unichr(0xf6) + u'.ids')
+    io.open(ids_file, 'w', encoding='utf-8').write(u'<ids>V' + unichr(0xe5) + u'ning</ids>')
+    status, body, response = post('/model-memory', u'{"idsFile":%s}' % json_string(ids_file))
+    check('model memory: an IDS not opened through the add-in is refused', status, 403)
+    status, body = get('/ids-files/read?path=' + escape_query(ids_file))
+    check('ids read: not picked -> 403', status, 403)
+    # what POST /ids-files/pick does after Revit's file dialog, which cannot be clicked in a script
+    server.GetType().GetField('_readable', BindingFlags.NonPublic | BindingFlags.Instance).GetValue(server).Allow(ids_file)
+    status, body, response = post('/model-memory', u'{"idsFile":%s}' % json_string(ids_file))
+    log('model-memory remember ->', status, body)
+    check('model memory: remembered, checked on disk', (status, '"exists":true' in body, '"name":"spec ' in body), (200, True, True))
+    check('model memory: written to the file', os.path.isfile(memory_file), True)
+    status, body = get('/ids-files/read?path=' + escape_query(ids_file))
+    check('ids read: picked file', (status, 'ning</ids>' in body), (200, True))
+    status, body = get('/ids-files/read?path=' + escape_query(stray))
+    check('ids read: not an IDS -> 400', status, 400)
+
     status, body = get('/ifc-configuration-files?name=WB%20Test%20Setup')
     log('configuration files with schema ->', status, body)
     check('setup files name the IFC version', (status, '"ifcVersion":"' in body), (200, True))
@@ -310,7 +336,7 @@ try:
     done = pump(status_task, 60)
     status_body = status_task.Result.Content.ReadAsStringAsync().Result if done else 'timed out'
     log('status after %.0fs ->' % (time.time() - started), status_body)
-    check('status reports its capabilities', '"capabilities":["writeback","export-overrides","pset-builder","element-inspector"]' in status_body, True)
+    check('status reports its capabilities', '"capabilities":["writeback","export-overrides","pset-builder","element-inspector","model-memory"]' in status_body, True)
     check('status keeps its other fields', ('"connected":true' in status_body, '"version":"1.4.0"' in status_body, '"configsReady":' in status_body), (True, True, True))
 
     uiapp.Application.DocumentChanged -= on_changed

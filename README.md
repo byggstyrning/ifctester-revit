@@ -177,11 +177,17 @@ Both plugins expose a local HTTP API for communication with the web interface:
 | `/pset-files/save` | POST | Revit only: write a generated pset file (`{ path?, name?, content, overwrite }`); 409 when it exists and `overwrite` is false |
 | `/element-parameters` | POST | Revit only: for `{ globalId, elementId? }`, every instance and type parameter of the element, and each line of the export setup's mapping files (with its line number) and the parameters it reads on that element. `psetFileContent` / `psetFileContentFor` read an unsaved draft in place of that pset file. Read-only |
 | `/pset-files/read?path=` | GET | Revit only: the text of a `.txt` pset file for editing; 422 when it is not UTF-8, 403 for a file the add-in has no reason to read (see below) |
+| `/model-memory` | GET | Revit only: what IfcTester last used for the open model (IDS file, export setup, pset file and mapping table overrides), each file checked on disk now (`exists`, `error`); `model: null` with a `message` for a document never saved |
+| `/model-memory` | POST | Revit only: remember `{ idsFile }` for the open model; only an IDS opened through `/ids-files/pick` (403 otherwise) |
+| `/ids-files/pick` | POST | Revit only: Revit's own file dialog for an IDS; `{ path, name, content }`, or `{ cancelled: true }` |
+| `/ids-files/read?path=` | GET | Revit only: an `.ids`/`.xml` picked through `/ids-files/pick` or remembered for the open model; 403 for any other |
 
 The write-back endpoints, the property set file override, the pset builder and the element inspector are
 described in [web/README.md](web/README.md#property-set-file-override). `GET /status` lists `capabilities`
-(`writeback`, `export-overrides`, `pset-builder`, `element-inspector`) so the page only shows controls the
-add-in supports.
+(`writeback`, `export-overrides`, `pset-builder`, `element-inspector`, `model-memory`) so the page only shows
+controls the add-in supports. The choices remembered per model are described in
+[web/README.md](web/README.md#remembered-per-model); they are kept per user in
+`%LOCALAPPDATA%\IfcTesterRevit\model-memory.json`, never in the Revit model.
 
 **Who may call the Revit API.** Every website open in the same browser can send requests to `localhost`, so
 the Revit add-in answers CORS only for its own page (`http://localhost:48881`) and the Vite dev and preview
@@ -193,8 +199,9 @@ environment variable `IFCTESTER_ALLOWED_ORIGINS` (separated by `;`) before Revit
 
 `GET /pset-files/read` returns only files the add-in has a reason to read: the property set file and mapping
 table of an export setup of the open document, the override files of an export, files saved through
-`POST /pset-files/save` and the files directly in the save folder `%LOCALAPPDATA%\IfcTesterRevit\psets`.
-Any other path is refused with `403`.
+`POST /pset-files/save`, the files directly in the save folder `%LOCALAPPDATA%\IfcTesterRevit\psets`, and the
+files remembered for the open model. Any other path is refused with `403`. `GET /ids-files/read` likewise returns
+only an IDS picked through the add-in's file dialog or remembered for the open model.
 
 **Default Ports:**
 - Revit: `48881`

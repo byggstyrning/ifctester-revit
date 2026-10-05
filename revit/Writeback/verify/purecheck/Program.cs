@@ -212,5 +212,67 @@ Check("readable: empty", readable.IsAllowed(" "), false);
 Check("readable: a user's file", readable.IsAllowed(@"C:\Users\someone\Documents\passwords.txt"), false);
 Check("readable: malformed", readable.IsAllowed("C:\\a<>|b.txt"), false);
 
+// ModelMemoryStore: per-model choices in one JSON file, paths only
+var memoryRoot = Path.Combine(Path.GetTempPath(), "ifctester-memory-" + Guid.NewGuid().ToString("N"));
+try
+{
+    var memoryPath = Path.Combine(memoryRoot, "IfcTesterRevit", "model-memory.json");
+    var store = new ModelMemoryStore(memoryPath);
+    var t0 = new DateTime(2026, 10, 5, 12, 0, 0, DateTimeKind.Utc);
+    const string central = @"\\srv\H29\K-20-V-100-6300-000.rvt";
+    Check("memory: nothing for a new model", store.Get(central), null);
+    store.RememberIds(central, @"\\srv\H29\ids\BS-100-63 åäö.ids", t0);
+    Check("memory: file created with its folder", File.Exists(memoryPath), true);
+    store.RememberExport(central, "IFC HUS 29X", @" \\srv\H29\pset\BS-100-63-Pset-K.txt ", " ", t0.AddMinutes(1));
+    string Mem(RememberedChoices? c) => c == null ? "null" : $"{c.IdsFile}|{c.Configuration}|{c.PsetFile}|{c.ParameterMappingFile}|{c.Updated}";
+    Check("memory: IDS and export kept together", Mem(store.Get(central)), @"\\srv\H29\ids\BS-100-63 åäö.ids|IFC HUS 29X|\\srv\H29\pset\BS-100-63-Pset-K.txt||2026-10-05T12:01:00Z");
+    Check("memory: key ignores case", store.Get(central.ToUpperInvariant())?.Configuration, "IFC HUS 29X");
+    Check("memory: read back by a new store (another Revit)", Mem(new ModelMemoryStore(memoryPath).Get(central)), Mem(store.Get(central)));
+    store.RememberExport(central, "IFC4 Reference View", null, null, t0.AddMinutes(2));
+    Check("memory: an export with the setup's own files clears the overrides", Mem(store.Get(central)), @"\\srv\H29\ids\BS-100-63 åäö.ids|IFC4 Reference View|||2026-10-05T12:02:00Z");
+    store.RememberIds(@"C:\Models\Other.rvt", @"C:\ids\other.ids", t0);
+    Check("memory: models apart", $"{store.Get(@"C:\Models\Other.rvt")?.IdsFile}|{store.Get(@"C:\Models\Other.rvt")?.Configuration}", @"C:\ids\other.ids|");
+    var json = File.ReadAllText(memoryPath);
+    Check("memory: JSON keeps the model path as key", json.Contains("\"\\\\\\\\srv\\\\H29\\\\K-20-V-100-6300-000.rvt\": {"), true);
+    Check("memory: JSON camelCase, no temp or lock file left", (json.Contains("\"idsFile\"") && json.Contains("\"version\": 1"), File.Exists(memoryPath + ".tmp"), File.Exists(memoryPath + ".lock")), (true, false, false));
+
+    // Two Revit sessions writing at once: neither loses the other's model
+    Parallel.For(0, 40, n => new ModelMemoryStore(memoryPath).RememberIds($@"C:\Models\M{n}.rvt", $@"C:\ids\{n}.ids", t0.AddSeconds(n)));
+    Check("memory: concurrent writers keep every model", Enumerable.Range(0, 40).Count(n => store.Get($@"C:\Models\M{n}.rvt")?.IdsFile == $@"C:\ids\{n}.ids"), 40);
+    Check("memory: earlier entries survive the concurrent writes", store.Get(central)?.Configuration, "IFC4 Reference View");
+
+    // A broken file is kept aside and the memory starts again instead of failing the page
+    File.WriteAllText(memoryPath, "{ not json");
+    Check("memory: unreadable file remembers nothing", store.Get(central), null);
+    Check("memory: unreadable file kept aside", File.ReadAllText(memoryPath + ".unreadable"), "{ not json");
+    store.RememberIds(central, @"C:\ids\new.ids", t0);
+    Check("memory: writes again after a broken file", store.Get(central)?.IdsFile, @"C:\ids\new.ids");
+
+    // Oldest models are forgotten beyond the limit
+    var many = new ModelMemoryFile();
+    for (var n = 0; n < ModelMemoryStore.MaxModels + 5; n++) many.Models[$@"C:\Models\Old{n:D4}.rvt"] = new RememberedChoices { IdsFile = "x.ids", Updated = t0.AddMinutes(-1000 + n).ToString("yyyy-MM-ddTHH:mm:ssZ") };
+    File.WriteAllText(memoryPath, WritebackJson.Serialize(many));
+    store.RememberIds(@"C:\Models\Newest.rvt", @"C:\ids\n.ids", t0);
+    Check("memory: capped, oldest forgotten", (store.Get(@"C:\Models\Old0000.rvt"), store.Get(@"C:\Models\Old0005.rvt"), store.Get(@"C:\Models\Old0006.rvt")?.IdsFile, store.Get(@"C:\Models\Newest.rvt")?.IdsFile), ((RememberedChoices?)null, (RememberedChoices?)null, "x.ids", @"C:\ids\n.ids"));
+    Check("memory: default path", ModelMemoryStore.DefaultPath(), Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "IfcTesterRevit", "model-memory.json"));
+    Check("memory request json", WritebackJson.Deserialize<ModelMemoryRequest>("""{ "idsFile": "C:\\ids\\a.ids" }""")!.IdsFile, @"C:\ids\a.ids");
+    Check("memory response json", WritebackJson.Serialize(new ModelMemoryResponse { Model = new MemoryModel { Key = @"C:\m.rvt", Title = "m" }, Remembered = new RememberedState { Configuration = "S", IdsFile = new RememberedFile { Path = @"C:\a.ids", Name = "a.ids", Exists = true } } }),
+        """{"model":{"key":"C:\\m.rvt","title":"m","workshared":false},"message":null,"remembered":{"updated":null,"configuration":"S","idsFile":{"path":"C:\\a.ids","name":"a.ids","exists":true,"error":null},"psetFile":null,"parameterMappingFile":null}}""");
+
+    // IDS files: extension, encoding by byte order mark, size
+    Check("ids extension", (IdsFiles.HasIdsExtension(@"C:\a.IDS"), IdsFiles.HasIdsExtension(@"C:\a.xml"), IdsFiles.HasIdsExtension(@"C:\a.txt"), IdsFiles.HasIdsExtension(null)), (true, true, false, false));
+    var idsPath = Path.Combine(memoryRoot, "spec åäö.ids");
+    File.WriteAllText(idsPath, "<ids>Våning</ids>", new UTF8Encoding(true));
+    Check("ids read UTF-8 with BOM", $"{IdsFiles.Read(idsPath).Name}|{IdsFiles.Read(idsPath).Content}", "spec åäö.ids|<ids>Våning</ids>");
+    File.WriteAllText(idsPath, "<ids>Våning</ids>", new UTF8Encoding(false));
+    Check("ids read UTF-8 without BOM", IdsFiles.Read(idsPath).Content, "<ids>Våning</ids>");
+    File.WriteAllText(idsPath, "<ids>Våning</ids>", Encoding.Unicode);
+    Check("ids read UTF-16 by its BOM", IdsFiles.Read(idsPath).Content, "<ids>Våning</ids>");
+}
+finally
+{
+    if (Directory.Exists(memoryRoot)) Directory.Delete(memoryRoot, true);
+}
+
 Console.WriteLine(failed == 0 ? "ALL PASSED" : $"{failed} FAILED");
 return failed;

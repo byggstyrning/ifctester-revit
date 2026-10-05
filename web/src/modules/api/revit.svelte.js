@@ -15,6 +15,30 @@ import hyperid from 'hyperid';
  * @property {ExportOverrides} exportOverrides - Files chosen on the page that replace the setup's own for the next export
  * @property {LastExport | null} lastExport - What the last export from this page read, as the add-in reported it
  * @property {boolean} exporting
+ * @property {ModelMemoryState | null} memory - What was last used for the open model; null before it is asked or from add-ins without "model-memory"
+ * @property {Record<string, string>} idsFiles - Path of each IDS document opened through the add-in, by document id
+ */
+
+/**
+ * A remembered file as GET /model-memory reports it, checked when it answered.
+ * @typedef {Object} RememberedFile
+ * @property {string} path
+ * @property {string} name
+ * @property {boolean} exists
+ * @property {string | null} error - Why it could not be checked, e.g. a share that did not answer
+ */
+
+/**
+ * GET /model-memory and POST /model-memory.
+ * @typedef {Object} ModelMemory
+ * @property {{ key: string, title: string | null, workshared: boolean } | null} model - Null for an unsaved document
+ * @property {string | null} message - Why nothing can be remembered
+ * @property {{ updated: string | null, configuration: string | null, idsFile: RememberedFile | null, psetFile: RememberedFile | null, parameterMappingFile: RememberedFile | null } | null} remembered
+ */
+
+/**
+ * The memory as the page shows it; notes say what could not be preselected and why.
+ * @typedef {ModelMemory & { loading: boolean, notes: string[] }} ModelMemoryState
  */
 
 /**
@@ -55,6 +79,9 @@ export const PSET_BUILDER = 'pset-builder';
 /** The add-in can list one element's parameters and how the export's mapping files read them (GET /status capabilities). */
 export const ELEMENT_INSPECTOR = 'element-inspector';
 
+/** The add-in remembers the IDS, export setup and pset overrides per model, and opens an IDS by path (GET /status capabilities). */
+export const MODEL_MEMORY = 'model-memory';
+
 // Revit connection state
 /** @type {RevitState} */
 export const Revit = $state({
@@ -67,7 +94,9 @@ export const Revit = $state({
     exportConfiguration: '',
     exportOverrides: { psetFile: '', parameterMappingFile: '' },
     lastExport: null,
-    exporting: false
+    exporting: false,
+    memory: null,
+    idsFiles: {}
 });
 
 /**
@@ -160,6 +189,11 @@ export const connect = async () => {
                 Revit.capabilities = Array.isArray(status?.capabilities) ? status.capabilities : [];
                 Revit.connected = true;
                 success('Connected to Revit');
+                if (Revit.capabilities.includes(MODEL_MEMORY)) {
+                    // Open IDS goes through the add-in's file dialog, so the file's path can be remembered
+                    IDS.setOpenProvider(openIdsThroughRevit);
+                    void applyModelMemory();
+                }
                 return true;
             } else {
                 throw new Error(`HTTP ${response.status}: ${response.statusText}`);
@@ -195,6 +229,8 @@ export const connect = async () => {
 export const disconnect = () => {
     Revit.connected = false;
     Revit.capabilities = [];
+    Revit.memory = null;
+    IDS.setOpenProvider(null);
     success('Disconnected from Revit');
 };
 
@@ -468,6 +504,154 @@ export const getElementParameters = (request) => requestJson('POST', '/element-p
 export const readPsetFile = (path) => requestJson('GET', `/pset-files/read?path=${encodeURIComponent(path)}`, undefined, 30000);
 
 /**
+ * What was last used for the model open in Revit, each file checked now.
+ * @returns {Promise<ModelMemory>}
+ */
+export const getModelMemory = () => requestJson('GET', '/model-memory', undefined, 60000);
+
+/**
+ * Remembers an IDS opened through the add-in for the model open in Revit.
+ * @param {string} idsFile
+ * @returns {Promise<ModelMemory>}
+ */
+export const rememberIdsFile = (idsFile) => requestJson('POST', '/model-memory', { idsFile }, 60000);
+
+/**
+ * Revit's own file dialog for an IDS. It waits for the user, so the timeout is long.
+ * @returns {Promise<{ cancelled: boolean, path: string | null, name: string | null, content: string | null }>}
+ */
+export const pickIdsFile = () => requestJson('POST', '/ids-files/pick', undefined, 30 * 60 * 1000);
+
+/**
+ * An IDS on the Revit machine that was picked through the add-in or is remembered for the open model.
+ * @param {string} path
+ * @returns {Promise<{ path: string, name: string, content: string }>}
+ */
+export const readIdsFile = (path) => requestJson('GET', `/ids-files/read?path=${encodeURIComponent(path)}`, undefined, 60000);
+
+/** @param {unknown} err */
+const errorText = (err) => (err instanceof Error ? err.message : String(err));
+
+/**
+ * @param {ModelMemory} memory
+ * @param {string[]} [notes]
+ */
+const setMemory = (memory, notes = Revit.memory?.notes ?? []) => {
+    Revit.memory = { model: memory?.model ?? null, message: memory?.message ?? null, remembered: memory?.remembered ?? null, loading: false, notes };
+};
+
+/**
+ * Opens an IDS file as the active document, or switches to it when this page already has it open.
+ * @param {{ path: string, content: string }} file
+ */
+const openIdsFile = async (file) => {
+    const open = Object.entries(Revit.idsFiles).find(([docId, path]) => path === file.path && IDS.Module.documents[docId]);
+    if (open) {
+        IDS.Module.activeDocument = open[0];
+        return open[0];
+    }
+    const docId = await IDS.openDocumentFromText(file.content);
+    Revit.idsFiles[docId] = file.path;
+    return docId;
+};
+
+/**
+ * Open IDS against an add-in with "model-memory": Revit's file dialog, then the IDS is remembered
+ * for the open model. Resolves false when the dialog could not be shown, so the browser's picker
+ * is used instead (that IDS has no path, so it is not remembered).
+ * @returns {Promise<boolean>}
+ */
+export const openIdsThroughRevit = async () => {
+    let picked;
+    try {
+        picked = await pickIdsFile();
+    } catch (err) {
+        error(`Revit could not show its file dialog (${errorText(err)}). Choose the IDS in the browser instead; it will not be remembered for this model.`);
+        return false;
+    }
+    if (picked.cancelled || !picked.path || picked.content == null) {
+        throw new Error('File selection cancelled');
+    }
+    await openIdsFile({ path: picked.path, content: picked.content });
+    try {
+        setMemory(await rememberIdsFile(picked.path));
+    } catch (err) {
+        console.warn('The IDS could not be remembered for this model:', err);
+    }
+    return true;
+};
+
+/**
+ * Preselects what was last used for the model open in Revit: opens the remembered IDS (read from
+ * disk again, so a newer version is picked up), and sets the export setup and the pset overrides
+ * unless this page has chosen others. Never exports or audits. A remembered file that is missing
+ * is reported on the page and left for the user to choose; nothing here fails the page.
+ */
+export const applyModelMemory = async () => {
+    Revit.memory = { model: null, message: null, remembered: null, loading: true, notes: [] };
+    /** @type {ModelMemory} */
+    let memory;
+    try {
+        memory = await getModelMemory();
+    } catch (err) {
+        console.warn('Model memory unavailable:', err);
+        Revit.memory = { model: null, message: `What was last used for this model could not be read: ${errorText(err)}`, remembered: null, loading: false, notes: [] };
+        return;
+    }
+
+    /** @type {string[]} */
+    const notes = [];
+    const remembered = memory?.remembered;
+    /**
+     * @param {RememberedFile} file
+     * @param {string} what
+     */
+    const unavailable = (file, what) =>
+        `The ${what} last used for this model ${file.error ? `could not be checked (${file.error})` : 'was not found'}: ${file.path}. Choose one manually.`;
+
+    if (remembered?.idsFile) {
+        const file = remembered.idsFile;
+        if (!file.exists) {
+            notes.push(unavailable(file, 'IDS'));
+        } else {
+            try {
+                await openIdsFile(await readIdsFile(file.path));
+            } catch (err) {
+                notes.push(`The IDS last used for this model could not be opened: ${file.path} (${errorText(err)}). Choose one manually.`);
+            }
+        }
+    }
+
+    if (remembered?.configuration && !Revit.exportConfiguration) {
+        Revit.exportConfiguration = remembered.configuration;
+    }
+
+    /** @type {[ 'psetFile' | 'parameterMappingFile', string ][]} */
+    const overrides = [['psetFile', 'property set file'], ['parameterMappingFile', 'parameter mapping table']];
+    for (const [kind, what] of overrides) {
+        const file = remembered?.[kind];
+        if (!file) continue;
+        if (!file.exists) {
+            notes.push(unavailable(file, what));
+        } else if (!Revit.exportOverrides[kind]) {
+            Revit.exportOverrides[kind] = file.path;
+        }
+    }
+
+    setMemory(memory, notes);
+};
+
+/** Reads the memory again after an export, which the add-in has just remembered; preselects nothing. */
+const refreshModelMemory = async () => {
+    if (!Revit.capabilities.includes(MODEL_MEMORY)) return;
+    try {
+        setMemory(await getModelMemory());
+    } catch (err) {
+        console.warn('Model memory unavailable:', err);
+    }
+};
+
+/**
  * The property set file and mapping table a setup exports with, so the page can show its default.
  * @param {string} configurationName
  * @returns {Promise<ExportFiles>}
@@ -650,6 +834,7 @@ export const exportAndAudit = async (configurationName) => {
         // Automatically load the exported IFC file
         await loadIfc(exportedFile);
         success('IFC exported and loaded successfully');
+        void refreshModelMemory();
 
         // Automatically run audit if IDS document is active
         if (IDS.Module.activeDocument) {

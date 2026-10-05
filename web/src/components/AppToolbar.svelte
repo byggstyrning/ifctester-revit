@@ -5,8 +5,9 @@
     import { error, success, idsValidationError } from "$src/modules/utils/toast.svelte";
     import { ChevronRightIcon, LinkIcon, XIcon } from "@lucide/svelte";
     import { Bonsai, connect, disconnect, runAudit as runBonsaiAudit } from "$src/modules/api/bonsai.svelte";
-    import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportAndAudit, EXPORT_OVERRIDES, overrideLabel } from "$src/modules/api/revit.svelte.js";
+    import { Revit, connect as connectRevit, disconnect as disconnectRevit, runAudit as runRevitAudit, getIfcConfigurations, exportAndAudit, EXPORT_OVERRIDES, MODEL_MEMORY, overrideLabel } from "$src/modules/api/revit.svelte.js";
     import ExportFileOverrides from "$src/components/ExportFileOverrides.svelte";
+    import ModelMemoryNote from "$src/components/ModelMemoryNote.svelte";
     import { ArchiCAD, connect as connectArchiCAD, disconnect as disconnectArchiCAD, runAudit as runArchiCADAudit, getIfcConfigurations as getArchiCADIfcConfigurations, exportIfc as exportArchiCADIfc } from "$src/modules/api/archicad.svelte.js";
     import { onMount } from 'svelte';
     import type { AuditReport } from "$src/types/report";
@@ -227,6 +228,18 @@
             Revit.exportConfiguration = selectedIfcConfig;
         }
     });
+
+    // The export setup last used for this model is preselected, unless one is chosen already;
+    // the model memory may answer before or after the setups are listed
+    const rememberedSetup = $derived(Revit.memory?.remembered?.configuration ?? '');
+    $effect(() => {
+        if (activeTab === 'revit' && rememberedSetup && !selectedIfcConfig && (ifcConfigurations as unknown as string[]).includes(rememberedSetup)) {
+            selectedIfcConfig = rememberedSetup;
+        }
+    });
+    const rememberedSetupMissing = $derived(
+        !!rememberedSetup && !isLoadingConfigs && ifcConfigurations.length > 0 && !(ifcConfigurations as unknown as string[]).includes(rememberedSetup)
+    );
 
     const handleBonsaiAudit = async () => {
         const auditId = await runBonsaiAudit();
@@ -591,6 +604,13 @@
                     </div>
                     
                     {#if Revit.connected}
+                        {#if Revit.capabilities.includes(MODEL_MEMORY)}
+                            <div class="section">
+                                <h3>This Model</h3>
+                                <ModelMemoryNote />
+                            </div>
+                        {/if}
+
                         <div class="section">
                             <h3>Load IFC File</h3>
                             <div 
@@ -629,6 +649,9 @@
                                                 <option value={config}>{config}</option>
                                             {/each}
                                         </select>
+                                        {#if rememberedSetupMissing}
+                                            <p class="help-text missing-setup" role="status">The export setup last used for this model, {rememberedSetup}, is not among this model's setups. Choose one.</p>
+                                        {/if}
                                         {#if Revit.capabilities.includes(EXPORT_OVERRIDES) && selectedIfcConfig}
                                             <ExportFileOverrides configuration={selectedIfcConfig} disabled={isExportingIfc || Revit.exporting} />
                                         {/if}
@@ -1063,6 +1086,10 @@
         font-size: 0.75rem;
         color: #6b7280;
         margin: 0;
+    }
+
+    .help-text.missing-setup {
+        color: #f87171;
     }
     
     .empty-state {

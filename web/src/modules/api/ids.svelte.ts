@@ -104,7 +104,39 @@ function normalizeIdsDict(obj: unknown): unknown {
     return result;
 }
 
+/**
+ * Opens IDS XML as a new document, active and in viewer mode.
+ * @returns The new document's id
+ */
+export async function openDocumentFromText(content: string): Promise<string> {
+    // Also called right after the page loads (a remembered IDS), possibly before Pyodide is up
+    await wasm.init();
+    const doc =normalizeIdsDict(await wasm.openIDS(content, false)) as IdsDocument;
+    const docId = id();
+
+    // Add document to list and set as active
+    Module.documents[docId] = doc;
+
+    // Initialize document state and switch to viewer mode
+    setDocumentState(docId, { viewMode: 'viewer' });
+
+    Module.activeDocument = docId;
+    return docId;
+}
+
+/**
+ * Opens an IDS some other way than the browser's file picker; resolves true when it did, false to
+ * fall back to the browser's picker. Set by a host integration that can give the file's path.
+ */
+type OpenProvider = () => Promise<boolean>;
+let openProvider: OpenProvider | null = null;
+
+export function setOpenProvider(provider: OpenProvider | null) {
+    openProvider = provider;
+}
+
 export async function openDocument() {
+    if (openProvider && await openProvider()) return;
     return new Promise<void>((resolve, reject) => {
         const fileInput = document.createElement('input') as HTMLInputElement & {
             oncancel?: ((this: HTMLInputElement, ev: Event) => void) | null;
@@ -125,17 +157,7 @@ export async function openDocument() {
                 reader.onload = async (e) => {
                     try {
                         const fileContent = (e.target as FileReader).result;
-                        const doc = normalizeIdsDict(await wasm.openIDS(String(fileContent), false)) as IdsDocument;
-                        const docId = id();
-
-                        // Add document to list and set as active
-                        Module.documents[docId] = doc;
-
-                        // Initialize document state and switch to viewer mode
-                        setDocumentState(docId, { viewMode: 'viewer' });
-
-                        Module.activeDocument = docId;
-
+                        await openDocumentFromText(String(fileContent));
                         resolve();
                     } catch (error) {
                         reject(error);
