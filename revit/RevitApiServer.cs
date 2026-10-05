@@ -1089,6 +1089,9 @@ public class RevitApiServer : IDisposable
     private readonly Writeback.WritebackEndpoints _writeback;
     // The IFC export setup and file overrides of the last export, which is the one the audited IFC came from
     private volatile Writeback.ExportRequestSettings? _lastExport;
+    // Which web pages may call the API, and which files the page may read through it
+    private readonly Writeback.OriginPolicy _origins;
+    private readonly Writeback.ReadablePaths _readable = new();
     
     // Export job tracking for async polling
     private readonly System.Collections.Concurrent.ConcurrentDictionary<string, ExportJob> _exportJobs = new();
@@ -1124,7 +1127,8 @@ public class RevitApiServer : IDisposable
     {
         _port = port;
         _baseUrl = $"http://localhost:{port}/";
-        _writeback = new Writeback.WritebackEndpoints(_writebackQueue, () => _lastExport);
+        _origins = Writeback.OriginPolicy.ForServer(port, Environment.GetEnvironmentVariable(Writeback.OriginPolicy.ExtraOriginsVariable));
+        _writeback = new Writeback.WritebackEndpoints(_writebackQueue, () => _lastExport, _readable);
     }
 
     public bool IsRunning => _isRunning;
@@ -1212,10 +1216,23 @@ public class RevitApiServer : IDisposable
         var request = context.Request;
         var response = context.Response;
 
-        // Enable CORS
-        response.AddHeader("Access-Control-Allow-Origin", "*");
-        response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-        response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
+        // CORS for the add-in's own page and the dev server only. Any website open in the browser
+        // can send requests to localhost, so one from a foreign origin is refused before it runs.
+        var origin = _origins.Check(request.Headers["Origin"]);
+        response.AddHeader("Vary", "Origin");
+        if (origin.AllowOrigin != null)
+        {
+            response.AddHeader("Access-Control-Allow-Origin", origin.AllowOrigin);
+            response.AddHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+            response.AddHeader("Access-Control-Allow-Headers", "Content-Type");
+        }
+        if (origin.Refuse)
+        {
+            System.Diagnostics.Debug.WriteLine($"Revit API Request refused from origin {request.Headers["Origin"]}: {request.HttpMethod} {request.Url?.AbsolutePath}");
+            await SendError(response, 403, "Requests from this origin are not allowed");
+            response.Close();
+            return;
+        }
 
         // Handle preflight OPTIONS request
         if (request.HttpMethod == "OPTIONS")
@@ -1301,11 +1318,11 @@ public class RevitApiServer : IDisposable
             else if (path == "/pset-files/read" && method == "GET")
             {
                 var psetPath = request.QueryString["path"];
-                await HandleWriteback(request, response, _ => Writeback.WritebackEndpoints.ReadPsetFile(psetPath));
+                await HandleWriteback(request, response, _ => _writeback.ReadPsetFile(psetPath, PsetSaveFolder));
             }
             else if (path == "/pset-files/save" && method == "POST")
             {
-                await HandleWriteback(request, response, body => Writeback.WritebackEndpoints.SavePsetFile(body, PsetSaveFolder));
+                await HandleWriteback(request, response, body => _writeback.SavePsetFile(body, PsetSaveFolder));
             }
             else if (path.StartsWith("/export-status/") && method == "GET")
             {
@@ -1640,6 +1657,7 @@ public class RevitApiServer : IDisposable
             else
             {
                 _lastExport = settings;
+                _readable.AllowAll(new[] { settings.PsetFile, settings.ParameterMappingFile });
                 StartExport(job, settings);
             }
 
@@ -1678,6 +1696,7 @@ public class RevitApiServer : IDisposable
                 // Wait for export to complete (no timeout since we're polling)
                 var success = await tcs.Task;
                 job.Files = handler.Files;
+                _readable.AllowAll(new[] { job.Files?.PsetFile, job.Files?.ParameterMappingFile });
 
                 if (success && !string.IsNullOrEmpty(handler.OutputFilePath) &&
                     File.Exists(handler.OutputFilePath))
@@ -1742,6 +1761,7 @@ public class RevitApiServer : IDisposable
             await SendError(response, 404, $"The IFC export setup '{name}' was not found among the IFC exporter's setups");
             return;
         }
+        _readable.AllowAll(new[] { files.PsetFile, files.ParameterMappingFile });
         await SendJson(response, Writeback.WritebackJson.Serialize(files));
     }
 

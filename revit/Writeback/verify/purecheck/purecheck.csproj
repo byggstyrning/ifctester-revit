@@ -10,6 +10,7 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <Compile Include="..\..\ApiAccess.cs" />
         <Compile Include="..\..\ExportFiles.cs" />
         <Compile Include="..\..\IfcGuid.cs" />
         <Compile Include="..\..\PsetBuilderContracts.cs" />

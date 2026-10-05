@@ -31,13 +31,16 @@ public sealed class WritebackEndpoints
 
     private readonly RevitWorkQueue _queue;
     private readonly Func<ExportRequestSettings?> _lastExport;
+    private readonly ReadablePaths _readable;
 
     /// <param name="queue">Runs the work on the Revit thread.</param>
     /// <param name="lastExport">The IFC export setup and file overrides of the last export the server ran, if any.</param>
-    public WritebackEndpoints(RevitWorkQueue queue, Func<ExportRequestSettings?> lastExport)
+    /// <param name="readable">The files GET /pset-files/read may return; the mapping files named to the page are added to it.</param>
+    public WritebackEndpoints(RevitWorkQueue queue, Func<ExportRequestSettings?> lastExport, ReadablePaths readable)
     {
         _queue = queue;
         _lastExport = lastExport;
+        _readable = readable;
     }
 
     public Task<WritebackHttpResult> ResolveParameters(string body)
@@ -49,6 +52,7 @@ public sealed class WritebackEndpoints
             var mapping = document == null
                 ? ExportMapping.None
                 : ExportMapping.Load(document, settings.Configuration, settings.PsetFile, settings.ParameterMappingFile);
+            _readable.AllowAll(mapping.Files);
             return WritebackService.Resolve(document, request, mapping);
         });
     }
@@ -101,6 +105,7 @@ public sealed class WritebackEndpoints
             var mapping = document == null
                 ? ExportMapping.None
                 : ExportMapping.Load(document, settings.Configuration, settings.PsetFile, settings.ParameterMappingFile);
+            _readable.AllowAll(mapping.Files);
             if (request.PsetFileContent != null &&
                 (string.IsNullOrWhiteSpace(request.PsetFileContentFor) ||
                  string.Equals(request.PsetFileContentFor, mapping.PsetFile, StringComparison.OrdinalIgnoreCase)))
@@ -114,15 +119,41 @@ public sealed class WritebackEndpoints
 
     /// <summary>
     /// GET /pset-files/read?path=: the text of an existing .txt property set file, for editing on
-    /// the page. Refuses a file that is not valid UTF-8, because editing it here and saving it back
-    /// as UTF-8 would garble its å, ä and ö. Plain file IO, not on the Revit thread.
+    /// the page. Only a file the add-in has a reason to read (see <see cref="ReadablePaths"/>, the
+    /// files in the save folder, and the files of the open document's export setups); anything else
+    /// is refused with 403. Refuses a file that is not valid UTF-8, because editing it here and
+    /// saving it back as UTF-8 would garble its å, ä and ö. Plain file IO, not on the Revit thread,
+    /// except for looking up the export setups.
     /// </summary>
-    public static async Task<WritebackHttpResult> ReadPsetFile(string? path)
+    public async Task<WritebackHttpResult> ReadPsetFile(string? path, string saveFolder)
     {
         if (string.IsNullOrWhiteSpace(path) || !Path.IsPathRooted(path) ||
             !string.Equals(Path.GetExtension(path), ".txt", StringComparison.OrdinalIgnoreCase))
         {
             return WritebackHttpResult.Error(400, "'path' must be the full path of a .txt file");
+        }
+
+        _readable.AllowFolder(saveFolder);
+        if (!_readable.IsAllowed(path))
+        {
+            try
+            {
+                // Not named to the page yet: it may still be the file of one of the model's export setups
+                var setupFiles = await _queue.Run(app => app.ActiveUIDocument?.Document is { } document ? ExportMapping.SetupFiles(document) : new List<string>(), StartTimeout).ConfigureAwait(false);
+                _readable.AllowAll(setupFiles);
+            }
+            catch (RevitBusyException ex)
+            {
+                return WritebackHttpResult.Error(503, ex.Message);
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Reading the export setups' files failed: {ex}");
+            }
+            if (!_readable.IsAllowed(path))
+            {
+                return WritebackHttpResult.Error(403, $"IfcTester reads only the property set files of the model's export setups, of an export, of the save folder or saved from the page: {path}");
+            }
         }
 
         try
@@ -151,7 +182,7 @@ public sealed class WritebackEndpoints
     }
 
     /// <summary>POST /pset-files/save: writes a generated pset file. Plain file IO, not on the Revit thread.</summary>
-    public static async Task<WritebackHttpResult> SavePsetFile(string body, string defaultFolder)
+    public async Task<WritebackHttpResult> SavePsetFile(string body, string defaultFolder)
     {
         PsetFileSaveRequest? request;
         try
@@ -168,6 +199,7 @@ public sealed class WritebackEndpoints
         {
             // A network folder can take long to answer; keep it off the listener thread
             var saved = await Task.Run(() => PsetFileWriter.Save(request, defaultFolder)).ConfigureAwait(false);
+            _readable.Allow(saved.Path);
             return WritebackHttpResult.Ok(saved);
         }
         catch (PsetFileSaveException ex)

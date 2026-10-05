@@ -11,7 +11,9 @@ npm install
 npm run dev
 ```
 
-The dev server runs on `http://localhost:5173` (or `http://10.13.42.120:5173` for network access).
+The dev server runs on `http://localhost:5173` (or `http://10.13.42.120:5173` for network access). The Revit
+add-in answers only its own page and `http://localhost:5173` / `:4173`; for a page on any other origin, add it
+to `IFCTESTER_ALLOWED_ORIGINS` on the Revit machine (see the root README, *API Communication*).
 
 ### Production Build
 
@@ -281,6 +283,8 @@ See the root `README.md` for deployment instructions using the unified deploymen
 - Verify Revit plugin is installed and running
 - Check API server is accessible at `http://localhost:48881`
 - Look for API URL in browser address bar (`?api=...`)
+- A `403` *Requests from this origin are not allowed*: the page is not served from `http://localhost:48881`
+  or the dev server on `http://localhost:5173`; add its origin to `IFCTESTER_ALLOWED_ORIGINS` and restart Revit
 - Check browser console for errors
 
 ### Element Selection Fails

@@ -1,5 +1,6 @@
 // Console check of the write-back classes that need no Revit: GlobalId compression, the
-// mapping file parsers, value parsing and the JSON contract. Exit code = number of failures.
+// mapping file parsers, value parsing, the JSON contract and the API's origin and file access
+// rules. Exit code = number of failures.
 using System.Text;
 using IfcTesterRevit.Writeback;
 
@@ -171,6 +172,45 @@ finally
 {
     if (Directory.Exists(saveRoot)) Directory.Delete(saveRoot, true);
 }
+
+// OriginPolicy: CORS only for the add-in's own page and the dev servers; a foreign origin is refused
+var origins = OriginPolicy.ForServer(48881, " http://localhost:5199/ ; https://Tool.Example.com:8443");
+string Origin(string? origin) { var d = origins.Check(origin); return $"{d.Refuse}|{d.AllowOrigin}"; }
+Check("origin: none (same-origin GET, curl)", Origin(null), "False|");
+Check("origin: the add-in's own page", Origin("http://localhost:48881"), "False|http://localhost:48881");
+Check("origin: vite dev", Origin("http://localhost:5173"), "False|http://localhost:5173");
+Check("origin: vite preview", Origin("http://localhost:4173"), "False|http://localhost:4173");
+Check("origin: extra from the variable", Origin("http://localhost:5199"), "False|http://localhost:5199");
+Check("origin: extra https, case and port", Origin("https://tool.example.com:8443"), "False|https://tool.example.com:8443");
+Check("origin: a website", Origin("https://evil.example"), "True|");
+Check("origin: localhost on another port", Origin("http://localhost:8080"), "True|");
+Check("origin: 127.0.0.1 is another origin", Origin("http://127.0.0.1:48881"), "True|");
+Check("origin: https on the add-in's port", Origin("https://localhost:48881"), "True|");
+Check("origin: null (file://, sandboxed frame)", Origin("null"), "True|");
+Check("origin: empty header", Origin(""), "True|");
+Check("origin: lookalike host", Origin("http://localhost.evil.example:48881"), "True|");
+Check("origin normalize", OriginPolicy.Normalize("HTTP://LocalHost:80/"), "http://localhost");
+Check("origins without the variable", string.Join(",", OriginPolicy.ForServer(48881, null).Allowed.OrderBy(o => o)), "http://localhost:4173,http://localhost:48881,http://localhost:5173");
+
+// ReadablePaths: only files named to the page, picked through the add-in, or directly in an allowed folder
+var readRoot = Path.Combine(Path.GetTempPath(), "ifctester-readable");
+var readable = new ReadablePaths();
+readable.Allow(Path.Combine(readRoot, "setup", "Byggpartner.txt"));
+readable.AllowAll(new[] { null, "", "relative.txt", @"\\srv\share\pset\H29 åäö.txt" });
+readable.AllowFolder(Path.Combine(readRoot, "psets"));
+Check("readable: named file", readable.IsAllowed(Path.Combine(readRoot, "setup", "Byggpartner.txt")), true);
+Check("readable: case and surrounding spaces", readable.IsAllowed("  " + Path.Combine(readRoot, "SETUP", "byggpartner.TXT") + " "), true);
+Check("readable: UNC path", readable.IsAllowed(@"\\srv\share\pset\h29 ÅÄÖ.txt"), true);
+Check("readable: another file in the same folder", readable.IsAllowed(Path.Combine(readRoot, "setup", "secrets.txt")), false);
+Check("readable: dot-dot back to a named file", readable.IsAllowed(Path.Combine(readRoot, "psets", "..", "setup", "Byggpartner.txt")), true);
+Check("readable: dot-dot out of the folder", readable.IsAllowed(Path.Combine(readRoot, "psets", "..", "other.txt")), false);
+Check("readable: file in the allowed folder", readable.IsAllowed(Path.Combine(readRoot, "psets", "Projekt.txt")), true);
+Check("readable: subfolder of the allowed folder", readable.IsAllowed(Path.Combine(readRoot, "psets", "sub", "Projekt.txt")), false);
+Check("readable: the folder itself", readable.IsAllowed(Path.Combine(readRoot, "psets")), false);
+Check("readable: relative path", readable.IsAllowed("relative.txt"), false);
+Check("readable: empty", readable.IsAllowed(" "), false);
+Check("readable: a user's file", readable.IsAllowed(@"C:\Users\someone\Documents\passwords.txt"), false);
+Check("readable: malformed", readable.IsAllowed("C:\\a<>|b.txt"), false);
 
 Console.WriteLine(failed == 0 ? "ALL PASSED" : $"{failed} FAILED");
 return failed;

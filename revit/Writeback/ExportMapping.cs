@@ -119,6 +119,19 @@ public sealed class ExportMapping
         return selection;
     }
 
+    /// <summary>The property set files and mapping tables every IFC export setup of the document exports with.</summary>
+    public static List<string> SetupFiles(Document document)
+    {
+        var files = new List<string>();
+        foreach (var configuration in AllConfigurations(document))
+        {
+            var selection = DescribeFiles(configuration, GetString(configuration, "Name") ?? "", null, null);
+            if (selection.PsetFile != null) files.Add(selection.PsetFile);
+            if (selection.ParameterMappingFile != null) files.Add(selection.ParameterMappingFile);
+        }
+        return files;
+    }
+
     /// <summary>The files an export with this exporter configuration object and these overrides reads.</summary>
     public static ExportFileSelection DescribeFiles(object configuration, string configurationName, string? psetOverride, string? mappingOverride)
     {
@@ -154,18 +167,23 @@ public sealed class ExportMapping
 
     private static object? FindConfiguration(Document document, string name)
     {
-        var mapType = IFCExportHelper.FindIFCExportConfigurationsMapType();
-        if (mapType == null) return null;
-
-        var map = IFCExportHelper.CreateAndInitializeConfigMap(mapType, document);
-        if (map == null) return null;
-
-        // Not the map's indexer: it throws for a name it does not have.
-        if (mapType.GetProperty("Values")?.GetValue(map) is not System.Collections.IEnumerable values) return null;
-
-        var all = values.Cast<object>().Where(c => c != null).ToList();
+        var all = AllConfigurations(document);
         return all.FirstOrDefault(c => string.Equals(GetString(c, "Name"), name, StringComparison.Ordinal))
                ?? all.FirstOrDefault(c => string.Equals(GetString(c, "Name"), name, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static List<object> AllConfigurations(Document document)
+    {
+        var mapType = IFCExportHelper.FindIFCExportConfigurationsMapType();
+        if (mapType == null) return new List<object>();
+
+        var map = IFCExportHelper.CreateAndInitializeConfigMap(mapType, document);
+        if (map == null) return new List<object>();
+
+        // Not the map's indexer: it throws for a name it does not have.
+        if (mapType.GetProperty("Values")?.GetValue(map) is not System.Collections.IEnumerable values) return new List<object>();
+
+        return values.Cast<object>().Where(c => c != null).ToList();
     }
 
     private static string ExporterDirectory()

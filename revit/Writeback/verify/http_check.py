@@ -126,14 +126,19 @@ try:
     pre = client.SendAsync(options).Result
     check('preflight', (int(pre.StatusCode),
                         list(pre.Headers.GetValues('Access-Control-Allow-Origin')),
-                        list(pre.Headers.GetValues('Access-Control-Allow-Headers'))), (200, ['*'], ['Content-Type']))
+                        list(pre.Headers.GetValues('Access-Control-Allow-Headers'))), (200, ['http://localhost:5173'], ['Content-Type']))
+    options = HttpRequestMessage(HttpMethod.Options, BASE + '/apply-changes')
+    options.Headers.Add('Origin', 'https://evil.example')
+    options.Headers.Add('Access-Control-Request-Method', 'POST')
+    pre = client.SendAsync(options).Result
+    check('foreign preflight -> 403 without CORS', (int(pre.StatusCode), pre.Headers.Contains('Access-Control-Allow-Origin')), (403, False))
 
     status, body, response = post('/resolve-parameters',
                                   u'{"items":[{"key":"k1","globalId":"%s","facet":"property","propertySet":"Pset_WallCommon","name":"FireRating"},'
                                   u'{"key":"k2","globalId":"%s","facet":"property","propertySet":"X","name":"Comments"}]}' % (guid, guid))
     log('resolve ->', status, body)
     check('resolve status', status, 200)
-    check('resolve CORS + content type', (list(response.Headers.GetValues('Access-Control-Allow-Origin')), response.Content.Headers.ContentType.MediaType), (['*'], 'application/json'))
+    check('resolve without Origin: no CORS header + content type', (response.Headers.Contains('Access-Control-Allow-Origin'), response.Content.Headers.ContentType.MediaType), (False, 'application/json'))
     check('resolve body', ('"key":"k1","found":true' in body, '"parameter":"Fire Rating","scope":"type"' in body,
                            '"parameter":"Comments","scope":"instance"' in body, '"elementId":%d' % wall.Id.Value in body), (True, True, True, True))
 
@@ -146,6 +151,20 @@ try:
     check('apply body', ('"applied":1,"failed":1' in body, '"key":"c1","ok":true' in body, '"key":"c2","ok":false' in body), (True, True, True))
     check('apply wrote to the active document', comments(wall), u'Brandvägg åäö')
     check('one named transaction', transactions, [[WritebackService.TransactionName]])
+
+    # a simple POST from a website the user has open: refused before it reaches Revit
+    foreign = HttpRequestMessage(HttpMethod.Post, BASE + '/apply-changes')
+    foreign.Headers.Add('Origin', 'https://evil.example')
+    foreign.Content = StringContent(u'{"changes":[{"key":"f","globalId":"%s","parameter":"Comments","scope":"instance","value":"foreign"}]}' % guid,
+                                    System.Text.Encoding.UTF8, 'text/plain')
+    sent = client.SendAsync(foreign)
+    pump(sent)
+    check('foreign origin POST -> 403 without CORS, nothing written',
+          (int(sent.Result.StatusCode), sent.Result.Headers.Contains('Access-Control-Allow-Origin'), comments(wall)), (403, False, u'Brandvägg åäö'))
+    allowed = HttpRequestMessage(HttpMethod.Get, BASE + '/pset-files?dir=' + escape_query(OUT))
+    allowed.Headers.Add('Origin', 'http://localhost:%d' % PORT)
+    sent = client.SendAsync(allowed).Result
+    check('own origin -> CORS header for it', (int(sent.StatusCode), list(sent.Headers.GetValues('Access-Control-Allow-Origin'))), (200, ['http://localhost:%d' % PORT]))
 
     # mapping file of a saved export setup: named in the request, then taken from the last export
     brand = u'{"key":"b","globalId":"%s","facet":"property","propertySet":"Custom","name":"Brand"}' % guid
@@ -268,6 +287,18 @@ try:
     status, body, response = post('/pset-files/save', u'{"content": oops')
     check('save with bad json -> 400', status, 400)
 
+    # reading a pset file: only files the add-in has named to the page or that are in the save folder
+    status, body = get('/pset-files/read?path=' + escape_query(saved))
+    check('read a saved file', (status, '"content":"y"' in body), (200, True))
+    status, body = get('/pset-files/read?path=' + escape_query(psets))
+    check('read the setup file the resolve named', (status, '"content":"' in body), (200, True))
+    stray = os.path.join(OUT, 'not-named.txt')
+    io.open(stray, 'w', encoding='utf-8').write(u'secret')
+    status, body = get('/pset-files/read?path=' + escape_query(stray))
+    check('read a file nobody named -> 403', (status, 'secret' in body), (403, False))
+    status, body = get('/pset-files/read?path=' + escape_query(os.path.join(save_folder, '..', 'not-named.txt')))
+    check('read out of the save folder with .. -> 403', status, 403)
+
     status, body = get('/ifc-configuration-files?name=WB%20Test%20Setup')
     log('configuration files with schema ->', status, body)
     check('setup files name the IFC version', (status, '"ifcVersion":"' in body), (200, True))
@@ -279,7 +310,7 @@ try:
     done = pump(status_task, 60)
     status_body = status_task.Result.Content.ReadAsStringAsync().Result if done else 'timed out'
     log('status after %.0fs ->' % (time.time() - started), status_body)
-    check('status reports its capabilities', '"capabilities":["writeback","export-overrides","pset-builder"]' in status_body, True)
+    check('status reports its capabilities', '"capabilities":["writeback","export-overrides","pset-builder","element-inspector"]' in status_body, True)
     check('status keeps its other fields', ('"connected":true' in status_body, '"version":"1.4.0"' in status_body, '"configsReady":' in status_body), (True, True, True))
 
     uiapp.Application.DocumentChanged -= on_changed

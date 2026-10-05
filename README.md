@@ -176,12 +176,25 @@ Both plugins expose a local HTTP API for communication with the web interface:
 | `/pset-suggestions` | POST | Revit only: for `{ propertySet, name, entities[] }` items, the parameters the exporter would read by name, with coverage |
 | `/pset-files/save` | POST | Revit only: write a generated pset file (`{ path?, name?, content, overwrite }`); 409 when it exists and `overwrite` is false |
 | `/element-parameters` | POST | Revit only: for `{ globalId, elementId? }`, every instance and type parameter of the element, and each line of the export setup's mapping files (with its line number) and the parameters it reads on that element. `psetFileContent` / `psetFileContentFor` read an unsaved draft in place of that pset file. Read-only |
-| `/pset-files/read?path=` | GET | Revit only: the text of a `.txt` pset file for editing; 422 when it is not UTF-8 |
+| `/pset-files/read?path=` | GET | Revit only: the text of a `.txt` pset file for editing; 422 when it is not UTF-8, 403 for a file the add-in has no reason to read (see below) |
 
 The write-back endpoints, the property set file override, the pset builder and the element inspector are
 described in [web/README.md](web/README.md#property-set-file-override). `GET /status` lists `capabilities`
 (`writeback`, `export-overrides`, `pset-builder`, `element-inspector`) so the page only shows controls the
 add-in supports.
+
+**Who may call the Revit API.** Every website open in the same browser can send requests to `localhost`, so
+the Revit add-in answers CORS only for its own page (`http://localhost:48881`) and the Vite dev and preview
+servers (`http://localhost:5173`, `http://localhost:4173`). A request whose `Origin` header names any other
+origin gets `403` and no `Access-Control-Allow-Origin`, before it reaches Revit; that covers simple POSTs,
+which a browser sends without a preflight. Requests without an `Origin` (a same-origin GET, curl, the verify
+scripts) are served. More origins, e.g. a dev server on another port or a network address, go in the
+environment variable `IFCTESTER_ALLOWED_ORIGINS` (separated by `;`) before Revit starts.
+
+`GET /pset-files/read` returns only files the add-in has a reason to read: the property set file and mapping
+table of an export setup of the open document, the override files of an export, files saved through
+`POST /pset-files/save` and the files directly in the save folder `%LOCALAPPDATA%\IfcTesterRevit\psets`.
+Any other path is refused with `403`.
 
 **Default Ports:**
 - Revit: `48881`
