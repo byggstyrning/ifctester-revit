@@ -293,7 +293,8 @@ try:
     status, body = get('/pset-files/read?path=' + escape_query(psets))
     check('read the setup file the resolve named', (status, '"content":"' in body), (200, True))
     stray = os.path.join(OUT, 'not-named.txt')
-    io.open(stray, 'w', encoding='utf-8').write(u'secret')
+    with io.open(stray, 'w', encoding='utf-8') as f:
+        f.write(u'secret')
     status, body = get('/pset-files/read?path=' + escape_query(stray))
     check('read a file nobody named -> 403', (status, 'secret' in body), (403, False))
     status, body = get('/pset-files/read?path=' + escape_query(os.path.join(save_folder, '..', 'not-named.txt')))
@@ -309,7 +310,8 @@ try:
     log('model-memory ->', status, body)
     check('model memory: the open model, nothing remembered', (status, '"workshared":false' in body, '"remembered":null' in body, 'wb-model-%s.rvt' % YEAR in body), (200, True, True, True))
     ids_file = os.path.join(OUT, u'spec ' + unichr(0xe5) + unichr(0xe4) + unichr(0xf6) + u'.ids')
-    io.open(ids_file, 'w', encoding='utf-8').write(u'<ids>V' + unichr(0xe5) + u'ning</ids>')
+    with io.open(ids_file, 'w', encoding='utf-8') as f:
+        f.write(u'<ids>V' + unichr(0xe5) + u'ning</ids>')
     status, body, response = post('/model-memory', u'{"idsFile":%s}' % json_string(ids_file))
     check('model memory: an IDS not opened through the add-in is refused', status, 403)
     status, body = get('/ids-files/read?path=' + escape_query(ids_file))
@@ -321,7 +323,8 @@ try:
     check('model memory: remembered, checked on disk', (status, '"exists":true' in body, '"name":"spec ' in body), (200, True, True))
     check('model memory: written to the file', os.path.isfile(memory_file), True)
     status, body = get('/ids-files/read?path=' + escape_query(ids_file))
-    check('ids read: picked file', (status, 'ning</ids>' in body), (200, True))
+    # System.Text.Json escapes < > and non-ASCII, so compare the parsed content
+    check('ids read: picked file', (status, json.loads(body)['content'] if status == 200 else body), (200, u'<ids>V' + unichr(0xe5) + u'ning</ids>'))
     status, body = get('/ids-files/read?path=' + escape_query(stray))
     check('ids read: not an IDS -> 400', status, 400)
 

@@ -251,7 +251,9 @@ public static class IdsFiles
     {
         var info = new FileInfo(path);
         if (info.Length > MaxBytes) throw new IOException($"{info.Name} is larger than {MaxBytes / (1024 * 1024)} MB, which is not an IDS file.");
-        using var reader = new StreamReader(path, new System.Text.UTF8Encoding(false), detectEncodingFromByteOrderMarks: true);
+        // Shared for writing too: an IDS open in an editor must still be readable
+        using var stream = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete);
+        using var reader = new StreamReader(stream, new System.Text.UTF8Encoding(false), detectEncodingFromByteOrderMarks: true);
         return new IdsFileResponse { Path = info.FullName, Name = info.Name, Content = reader.ReadToEnd() };
     }
 }

@@ -268,6 +268,10 @@ try
     Check("ids read UTF-8 without BOM", IdsFiles.Read(idsPath).Content, "<ids>Våning</ids>");
     File.WriteAllText(idsPath, "<ids>Våning</ids>", Encoding.Unicode);
     Check("ids read UTF-16 by its BOM", IdsFiles.Read(idsPath).Content, "<ids>Våning</ids>");
+    using (new FileStream(idsPath, FileMode.Open, FileAccess.ReadWrite, FileShare.ReadWrite))
+    {
+        Check("ids read while an editor holds it open for writing", IdsFiles.Read(idsPath).Content, "<ids>Våning</ids>");
+    }
 }
 finally
 {
