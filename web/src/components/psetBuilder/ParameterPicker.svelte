@@ -35,8 +35,9 @@
     });
     const shown = $derived(matches.slice(0, SHOWN));
 
+    const categories = (p: ModelParameter) => (p.categories.length > 3 ? `${p.categories.slice(0, 3).join(", ")} +${p.categories.length - 3}` : p.categories.join(", "));
     const describe = (p: ModelParameter) =>
-        [p.scope, p.origin, p.builtInParameter ? `BuiltInParameter.${p.builtInParameter}` : "", `${p.elementCount} elements`, p.readOnly ? "read-only" : ""]
+        [p.scope, p.origin, p.builtInParameter ? `BuiltInParameter.${p.builtInParameter}` : "", `${p.elementCount} elements`, categories(p), p.readOnly ? "read-only" : ""]
             .filter(Boolean)
             .join(" · ");
 
@@ -139,7 +140,8 @@
                 show("");
             }}>▾</button>
         <ul bind:this={list} id={listId} role="listbox" popover="manual" class="list scrollbar" aria-label={pickLabel}>
-            {#each shown as p, i (p.name + p.origin + (p.builtInParameter ?? ""))}
+            <!-- Not keyed: a model can hold two shared parameters with one name (different GUIDs) -->
+            {#each shown as p, i}
                 <!-- The keyboard stays in the input, which moves the active option (aria-activedescendant) -->
                 <!-- svelte-ignore a11y_click_events_have_key_events -->
                 <li

@@ -574,6 +574,8 @@ export type ModelParameter = {
     scope: "instance" | "type" | "both";
     origin: string;
     builtInParameter?: string | null;
+    /** A shared parameter's GUID: two shared parameters can carry the same name */
+    guid?: string | null;
     storageType: string;
     dataType?: string;
     readOnly: boolean;

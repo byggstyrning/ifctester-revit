@@ -47,6 +47,9 @@ const MODEL_PARAMETERS = [
     { name: 'Bärande', scope: 'instance', origin: 'shared', storageType: 'yesno', dataType: 'boolean', readOnly: false, instanceCount: 12, typeCount: 0, elementCount: 12, withValueCount: 12, categories: ['Walls'] },
     { name: 'Structural', scope: 'instance', origin: 'built-in', builtInParameter: 'WALL_STRUCTURAL_SIGNIFICANT', storageType: 'yesno', dataType: 'boolean', readOnly: false, instanceCount: 12, typeCount: 0, elementCount: 12, withValueCount: 12, categories: ['Walls'] },
     { name: 'Fire Rating', scope: 'type', origin: 'built-in', builtInParameter: 'FIRE_RATING', storageType: 'string', dataType: 'string', readOnly: false, instanceCount: 0, typeCount: 10, elementCount: 10, withValueCount: 10, categories: ['Walls'] },
+    // Two shared parameters with one name and different GUIDs, as a real model had
+    { name: 'FMGUID', scope: 'instance', origin: 'shared', guid: '30cd2e32-dfdb-4c5b-9bf4-bf52cdec41be', storageType: 'string', dataType: 'string', readOnly: false, instanceCount: 30, typeCount: 0, elementCount: 30, withValueCount: 30, categories: ['Doors', 'Floors', 'Walls', 'Windows'] },
+    { name: 'FMGUID', scope: 'instance', origin: 'shared', guid: '86f81a5a-46c9-474d-bc86-c58342953316', storageType: 'string', dataType: 'string', readOnly: false, instanceCount: 6, typeCount: 0, elementCount: 6, withValueCount: 6, categories: ['Doors'] },
 ];
 
 /** The add-in with the pset builder endpoints, or an older one without them. */
@@ -265,8 +268,10 @@ test.describe('pset builder', () => {
         // ...from the dropdown of the model's parameters, which loaded when the builder opened
         await page.getByRole('button', { name: 'Model parameters for Bärande' }).click();
         const options = page.getByRole('listbox', { name: 'Model parameters for Bärande' }).getByRole('option');
-        await expect(options).toHaveCount(3);
-        await expect(options.filter({ hasText: 'Fire Rating' })).toContainText('type · built-in · BuiltInParameter.FIRE_RATING · 10 elements');
+        await expect(options).toHaveCount(5);
+        await expect(options.filter({ hasText: 'Fire Rating' })).toContainText('type · built-in · BuiltInParameter.FIRE_RATING · 10 elements · Walls');
+        await expect(options.filter({ hasText: 'FMGUID' }).first()).toContainText('30 elements · Doors, Floors, Walls +1');
+        await expect(page.getByLabel('Revit parameter of Brandklass')).toHaveAttribute('placeholder', /pick or type/);
         await page.getByLabel('Revit parameter of Bärande').pressSequentially('bär');
         await expect(options).toHaveCount(1);
         await options.first().click();
