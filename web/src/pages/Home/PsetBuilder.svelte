@@ -22,6 +22,7 @@
         suggestFromModel
     } from "$src/modules/api/psetBuilder.svelte";
     import { Revit, fileNameOf } from "$src/modules/api/revit.svelte.js";
+    import ParameterPicker from "$src/components/psetBuilder/ParameterPicker.svelte";
     import {
         EXPORTER_DATA_TYPES,
         type PsetRow,
@@ -50,6 +51,15 @@
         // Reading everything that is kept makes the effect run again when any of it changes
         const kept = JSON.stringify([builder.rows, builder.schemaName, builder.savePath]);
         if (kept) persist(builder);
+    });
+
+    // The parameter dropdown lists the model's parameters: read them once per IDS when Revit is there
+    const parametersTried = new Set<string>();
+    let parametersLoading = $state(false);
+    $effect(() => {
+        if (!revit || !docId || !builder?.ready || builder.modelParameters !== null || parametersTried.has(docId)) return;
+        parametersTried.add(docId);
+        refreshParameters();
     });
 
     const groups = $derived.by(() => {
@@ -118,11 +128,14 @@
     }
 
     async function refreshParameters() {
-        if (!builder) return;
+        if (!builder || parametersLoading) return;
+        parametersLoading = true;
         try {
             await loadModelParameters(builder);
         } catch (err) {
             builder.error = `The model's parameters could not be read: ${err instanceof Error ? err.message : String(err)}`;
+        } finally {
+            parametersLoading = false;
         }
     }
 
@@ -195,13 +208,6 @@
             </details>
         {/if}
 
-        {#if builder.modelParameters}
-            <datalist id="pset-builder-parameters">
-                {#each builder.modelParameters as p (p.name + p.origin + (p.builtInParameter ?? ""))}
-                    <option value={p.name}>{p.scope} · {p.origin} · {p.elementCount} elements</option>
-                {/each}
-            </datalist>
-        {/if}
         <datalist id="pset-builder-datatypes">
             {#each EXPORTER_DATA_TYPES as t (t)}<option value={t}></option>{/each}
         </datalist>
@@ -262,12 +268,15 @@
                                 <td class="params">
                                     {#each row.parameters.length ? row.parameters : [""] as parameter, index (index)}
                                         <div class="param">
-                                            <input
-                                                list={builder.modelParameters ? "pset-builder-parameters" : undefined}
-                                                aria-label={index === 0 ? `Revit parameter of ${row.name}` : `Fallback ${index} of ${row.name}`}
-                                                placeholder={index === 0 ? "unmapped: type a name or BuiltInParameter.X" : "fallback"}
+                                            <ParameterPicker
+                                                parameters={builder.modelParameters}
+                                                label={index === 0 ? `Revit parameter of ${row.name}` : `Fallback ${index} of ${row.name}`}
+                                                pickLabel={index === 0 ? `Model parameters for ${row.name}` : `Model parameters for ${row.name}, fallback ${index}`}
+                                                placeholder={index === 0
+                                                    ? builder.modelParameters ? "unmapped: pick or type a name" : "unmapped: type a name or BuiltInParameter.X"
+                                                    : "fallback"}
                                                 value={parameter}
-                                                onchange={(e) => setParameter(row, index, e.currentTarget.value)}
+                                                onchange={(value) => setParameter(row, index, value)}
                                             />
                                             {#if row.parameters.length > 1 || (index === 0 && parameter)}
                                                 <button class="icon" aria-label="Remove {parameter || 'parameter'}" onclick={() => removeParameter(row, index)}>×</button>
@@ -324,8 +333,10 @@
                     <button class="btn subtle" onclick={() => builder && (builder.overwritePending = null)}>Cancel</button>
                 </p>
             {/if}
-            {#if revit && !builder.modelParameters}
-                <button class="link small" onclick={refreshParameters}>Load the model's parameters for the picker</button>
+            {#if revit}
+                <button class="link small" onclick={refreshParameters} disabled={parametersLoading} title="Read the parameter list again after changing the model">
+                    {parametersLoading ? "Reading the model's parameters..." : builder.modelParameters ? "Reload the model's parameters" : "Load the model's parameters for the dropdown"}
+                </button>
             {/if}
             <details open>
                 <summary>Preview</summary>
@@ -464,8 +475,8 @@
         background: #ef44441f;
     }
 
-    tr.unmapped .params input {
-        border-color: #f87171;
+    tr.unmapped .params {
+        --picker-border: #f87171;
     }
 
     tr.excluded td {
@@ -502,9 +513,6 @@
         margin-bottom: 0.125rem;
     }
 
-    .param input {
-        flex: 1;
-    }
 
     .scope {
         width: 1.75rem;

@@ -262,8 +262,16 @@ test.describe('pset builder', () => {
         await expect(page.getByText('40 elements and 9 types of Projekt A')).toBeVisible();
 
         // Map the unmapped row by hand with a fallback, and go back to IFC2X3
-        await page.getByLabel('Revit parameter of Bärande').fill('Bärande');
-        await page.getByLabel('Revit parameter of Bärande').press('Tab');
+        // ...from the dropdown of the model's parameters, which loaded when the builder opened
+        await page.getByRole('button', { name: 'Model parameters for Bärande' }).click();
+        const options = page.getByRole('listbox', { name: 'Model parameters for Bärande' }).getByRole('option');
+        await expect(options).toHaveCount(3);
+        await expect(options.filter({ hasText: 'Fire Rating' })).toContainText('type · built-in · BuiltInParameter.FIRE_RATING · 10 elements');
+        await page.getByLabel('Revit parameter of Bärande').pressSequentially('bär');
+        await expect(options).toHaveCount(1);
+        await options.first().click();
+        await expect(page.getByLabel('Revit parameter of Bärande')).toHaveValue('Bärande');
+        await expect(page.getByRole('listbox', { name: 'Model parameters for Bärande' })).toBeHidden();
         await row(page, 'Projekt|Bärande').getByRole('button', { name: '+ fallback' }).click();
         await page.getByLabel('Fallback 1 of Bärande').fill('Structural');
         await page.getByLabel('Fallback 1 of Bärande').press('Tab');
