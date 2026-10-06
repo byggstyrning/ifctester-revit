@@ -37,7 +37,7 @@
 
     const categories = (p: ModelParameter) => (p.categories.length > 3 ? `${p.categories.slice(0, 3).join(", ")} +${p.categories.length - 3}` : p.categories.join(", "));
     const describe = (p: ModelParameter) =>
-        [p.scope, p.origin, p.builtInParameter ? `BuiltInParameter.${p.builtInParameter}` : "", `${p.elementCount} elements`, categories(p), p.readOnly ? "read-only" : ""]
+        [p.scope, p.origin, p.builtInParameter ? `BuiltInParameter.${p.builtInParameter}` : "", p.elementCount > 0 ? `${p.elementCount} elements` : "bound, on no element yet", categories(p), p.readOnly ? "read-only" : ""]
             .filter(Boolean)
             .join(" · ");
 

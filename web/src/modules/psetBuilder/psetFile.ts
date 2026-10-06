@@ -613,6 +613,10 @@ export function rowWarnings(row: PsetRow, modelParameters: ModelParameter[] | nu
         if (origin === "project") warnings.push(`${parameter} is a project parameter: Revit 2025 and 2026 export these (checked); older versions were not checked, so verify the IFC there`);
         if (readOnly) warnings.push(`${parameter} is read-only in Revit: write-back cannot fix its values`);
         if (modelParameters && known.length === 0 && !suggested) warnings.push(`${parameter} is not a parameter of any model element`);
+        if (known.length > 0 && known.every((p) => p.elementCount === 0) && !suggested) {
+            const categories = [...new Set(known.flatMap((p) => p.categories))].join(", ");
+            warnings.push(`${parameter} is bound${categories ? ` to ${categories}` : ""} but no element has it yet: the IFC gets nothing from it until one does`);
+        }
         if (known.length > 0 && !suggested) {
             const onType = known.some((p) => p.scope !== "instance");
             const onInstance = known.some((p) => p.scope !== "type");

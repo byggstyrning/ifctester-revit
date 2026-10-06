@@ -32,7 +32,10 @@ public sealed class ModelParameterScan
         }
     }
 
-    /// <summary>GET /model-parameters: every distinct parameter of the model elements and their types.</summary>
+    /// <summary>
+    /// GET /model-parameters: every distinct parameter of the model elements and their types, plus
+    /// the shared and project parameters bound to categories that no scanned element carries yet.
+    /// </summary>
     public static ModelParametersResponse Scan(Document? document)
     {
         if (document == null) return new ModelParametersResponse { Message = "No model is open in Revit." };
@@ -74,6 +77,7 @@ public sealed class ModelParameterScan
             TypeCount = types.Count,
             Parameters = entries.Values
                 .Select(e => e.ToInfo(categoryNames))
+                .Concat(scan.BoundWithoutElements())
                 .OrderBy(p => p.Name, StringComparer.OrdinalIgnoreCase)
                 .ThenBy(p => p.Origin, StringComparer.Ordinal)
                 .ToList()
@@ -331,6 +335,57 @@ public sealed class ModelParameterScan
         meta = new ParameterMeta(definition.Name, origin, builtIn, guid, parameter.StorageType, ParameterResolver.StorageTypeName(parameter), DataTypeName(definition), parameter.IsReadOnly);
         _meta[id] = meta;
         return meta;
+    }
+
+    /// <summary>
+    /// Bound parameters the element pass did not meet: bound to categories with no element yet, or
+    /// only to categories the scan leaves out. Counts are zero; the categories are the binding's.
+    /// </summary>
+    private IEnumerable<ModelParameterInfo> BoundWithoutElements()
+    {
+        var iterator = _document.ParameterBindings.ForwardIterator();
+        while (iterator.MoveNext())
+        {
+            if (iterator.Key is not InternalDefinition definition || definition.Id == ElementId.InvalidElementId) continue;
+            if (string.IsNullOrWhiteSpace(definition.Name)) continue;
+            if (_meta.TryGetValue(definition.Id.Value, out var seen) && seen != null) continue;
+
+            var categories = new List<string>();
+            if (iterator.Current is ElementBinding { Categories: { } bound })
+            {
+                foreach (Category category in bound) categories.Add(category.Name);
+            }
+            var shared = _document.GetElement(definition.Id) as SharedParameterElement;
+            yield return new ModelParameterInfo
+            {
+                Name = definition.Name,
+                Scope = iterator.Current is TypeBinding ? WritebackScope.Type : WritebackScope.Instance,
+                Origin = shared != null ? ParameterOrigin.Shared : ParameterOrigin.Project,
+                Guid = shared?.GuidValue.ToString(),
+                StorageType = StorageTypeName(definition),
+                DataType = DataTypeName(definition),
+                ReadOnly = false,
+                Categories = categories.OrderBy(n => n, StringComparer.OrdinalIgnoreCase).ToList()
+            };
+        }
+    }
+
+    /// <summary>The storage type a parameter of this definition would have, without a parameter to ask.</summary>
+    private static string StorageTypeName(Definition definition)
+    {
+        try
+        {
+            var spec = definition.GetDataType();
+            if (spec == SpecTypeId.Boolean.YesNo) return "yesno";
+            if (spec == SpecTypeId.Int.Integer) return "integer";
+            if (spec == SpecTypeId.Reference.Material || Category.IsBuiltInCategory(spec)) return "elementid";
+            if (spec == SpecTypeId.Number || UnitUtils.IsMeasurableSpec(spec)) return "double";
+            return "string";
+        }
+        catch (Exception)
+        {
+            return "string";
+        }
     }
 
     private static string DataTypeName(Definition definition)

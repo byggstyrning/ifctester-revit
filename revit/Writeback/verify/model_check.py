@@ -92,6 +92,12 @@ def pset_builder_checks(doc, w1, w6, base_type, type2):
     antal = info('Antal')
     check('scan Antal', (antal.StorageType, antal.InstanceCount), ('integer', 6))
     log('   data types: Antal', antal.DataType, '| Brandklass', brand.DataType, '| Fire Rating', fire.DataType)
+    bound = info('WB Unplaced')
+    check('scan lists a parameter bound to a category with no element', (bound.Origin, bound.Scope, bound.ElementCount, bound.InstanceCount, list(bound.Categories), bound.StorageType, bound.DataType, bound.Guid is not None),
+          ('shared', 'instance', 0, 0, ['Ceilings'], 'double', 'length', True))
+    flag = info('WB Unplaced Flag')
+    check('scan lists a type binding with no element', (flag.Scope, flag.ElementCount, list(flag.Categories), flag.StorageType), ('type', 0, ['Ceilings'], 'yesno'))
+    check('scan lists a bound parameter on elements once', len(by.get('Brandklass', [])), 1)
     check('scan has no project parameters in the test model', [p.Name for p in scan.Parameters if p.Origin == 'project'], [])
     check('scan json', '"origin":"shared"' in WritebackJson.Serialize(brand) and '"builtInParameter":null' in WritebackJson.Serialize(brand), True)
     check('scan of no document', ModelParameterScan.Scan(None).Message, 'No model is open in Revit.')
@@ -353,6 +359,17 @@ try:
     check('bind Brandklass', shared('Brandklass', SpecTypeId.String.Text, True, GroupTypeId.Data), True)
     check('bind Antal', shared('Antal', SpecTypeId.Int.Integer, True, GroupTypeId.Data), True)
     check('bind Pset_WallCommon.AcousticRating', shared('Pset_WallCommon.AcousticRating', SpecTypeId.String.Text, False, GroupTypeId.Data), True)
+
+    # Bound to ceilings, of which the model has none: listed by the scan from the bindings
+    def unplaced(name, spec, instance):
+        definition = group.Definitions.Create(ExternalDefinitionCreationOptions(name, spec))
+        cats = app.Create.NewCategorySet()
+        cats.Insert(doc.Settings.Categories.get_Item(BuiltInCategory.OST_Ceilings))
+        binding = app.Create.NewInstanceBinding(cats) if instance else app.Create.NewTypeBinding(cats)
+        return doc.ParameterBindings.Insert(definition, binding, GroupTypeId.Data)
+
+    check('bind WB Unplaced to ceilings', unplaced('WB Unplaced', SpecTypeId.Length, True), True)
+    check('bind WB Unplaced Flag to ceiling types', unplaced('WB Unplaced Flag', SpecTypeId.Boolean.YesNo, False), True)
 
     level = FilteredElementCollector(doc).OfClass(Level).FirstElement()
     if level is None:
