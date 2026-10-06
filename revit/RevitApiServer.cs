@@ -532,6 +532,17 @@ public class GetIfcConfigurationsEventHandler : IExternalEventHandler
     }
 
     public string GetName() => "GetIfcConfigurations";
+
+    /// <summary>
+    /// The setup names, read on the Revit thread. A fresh handler per call, so overlapping requests
+    /// through the work queue never share one list or one completion source.
+    /// </summary>
+    public static List<string> Read(UIApplication app)
+    {
+        var handler = new GetIfcConfigurationsEventHandler();
+        handler.Execute(app);
+        return handler.Configurations;
+    }
 }
 
 /// <summary>
@@ -1082,12 +1093,14 @@ public class RevitApiServer : IDisposable
     private SelectElementEventHandler? _eventHandler;
     private ExternalEvent? _externalEventByGuid;
     private SelectElementByGuidEventHandler? _eventHandlerByGuid;
-    private ExternalEvent? _externalEventGetIfcConfigs;
-    private GetIfcConfigurationsEventHandler? _eventHandlerGetIfcConfigs;
     private ExternalEvent? _externalEventExportIfc;
     private ExportIfcEventHandler? _eventHandlerExportIfc;
-    private bool _configsLoaded = false;
-    private readonly object _configsLock = new object();
+    // Whether the IFC export setups have been read once, which /status reports as configsReady
+    private volatile bool _configsRead;
+    // Below the page's own timeouts (5 s for /status, 15 s for /ifc-configurations), so the page
+    // gets an answer instead of aborting
+    private static readonly TimeSpan StatusConfigsWait = TimeSpan.FromSeconds(3);
+    private static readonly TimeSpan ConfigsWait = TimeSpan.FromSeconds(8);
 
     // Write-back (POST /resolve-parameters, POST /apply-changes): one queued external event
     private readonly Writeback.RevitWorkQueue _writebackQueue = new();
@@ -1160,9 +1173,6 @@ public class RevitApiServer : IDisposable
         
         _eventHandlerByGuid = new SelectElementByGuidEventHandler();
         _externalEventByGuid = ExternalEvent.Create(_eventHandlerByGuid);
-        
-        _eventHandlerGetIfcConfigs = new GetIfcConfigurationsEventHandler();
-        _externalEventGetIfcConfigs = ExternalEvent.Create(_eventHandlerGetIfcConfigs);
         
         _eventHandlerExportIfc = new ExportIfcEventHandler();
         _externalEventExportIfc = ExternalEvent.Create(_eventHandlerExportIfc);
@@ -1380,89 +1390,24 @@ public class RevitApiServer : IDisposable
 
     private async Task HandleStatus(HttpListenerResponse response)
     {
-        // Preload IFC configurations to ensure they're ready when status returns OK
-        bool configsReady = false;
-        
-        lock (_configsLock)
+        // Read the IFC export setups once so they are ready when the page asks; a busy Revit is
+        // reported as "initializing" rather than holding the status answer back
+        bool configsReady = _configsRead;
+        if (!configsReady && _uiApplication != null)
         {
-            // If configs are already loaded, return immediately
-            if (_configsLoaded)
+            try
             {
-                configsReady = true;
-            }
-        }
-        
-        // If not loaded yet, try to load them with retry logic
-        if (!configsReady && _uiApplication != null && _externalEventGetIfcConfigs != null && _eventHandlerGetIfcConfigs != null)
-        {
-            int maxRetries = 3;
-            int retryDelay = 1000; // Start with 1 second delay
-            
-            for (int retry = 0; retry < maxRetries && !configsReady; retry++)
-            {
-                try
+                var configs = await _writebackQueue.Run(GetIfcConfigurationsEventHandler.Read, StatusConfigsWait);
+                if (configs.Count > 0)
                 {
-                    // Try to load configurations
-                    var tcs = new TaskCompletionSource<bool>();
-                    _eventHandlerGetIfcConfigs.CompletionSource = tcs;
-                    _eventHandlerGetIfcConfigs.Configurations.Clear();
-                    _externalEventGetIfcConfigs.Raise();
-
-                    // Use longer timeout for first attempt (IFC assemblies may need to load)
-                    int timeout = retry == 0 ? 10000 : 5000; // 10 seconds for first attempt, 5 for retries
-                    var completed = await Task.WhenAny(tcs.Task, Task.Delay(timeout));
-                    
-                    if (completed == tcs.Task && await tcs.Task)
-                    {
-                        var configs = _eventHandlerGetIfcConfigs.Configurations;
-                        configsReady = configs.Count > 0;
-                        
-                        if (configsReady)
-                        {
-                            lock (_configsLock)
-                            {
-                                _configsLoaded = true;
-                            }
-                            
-                            System.Diagnostics.Debug.WriteLine($"Status check: Configs loaded successfully ({configs.Count} configurations) after {retry + 1} attempt(s)");
-                            break;
-                        }
-                    }
-                    else
-                    {
-                        System.Diagnostics.Debug.WriteLine($"Status check: Config loading attempt {retry + 1} timed out (timeout: {timeout}ms)");
-                        
-                        // Wait before retry (exponential backoff)
-                        if (retry < maxRetries - 1)
-                        {
-                            await Task.Delay(retryDelay);
-                            retryDelay *= 2; // Exponential backoff
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    System.Diagnostics.Debug.WriteLine($"Status check: Exception loading configs (attempt {retry + 1}): {ex.Message}");
-                    
-                    // Wait before retry
-                    if (retry < maxRetries - 1)
-                    {
-                        await Task.Delay(retryDelay);
-                        retryDelay *= 2;
-                    }
+                    _configsRead = true;
+                    configsReady = true;
                 }
             }
-            
-            if (!configsReady)
+            catch (Exception ex)
             {
-                System.Diagnostics.Debug.WriteLine("Status check: All config loading attempts failed or timed out");
+                System.Diagnostics.Debug.WriteLine($"Status check: IFC export setups not read yet: {ex.Message}");
             }
-        }
-        else if (!configsReady)
-        {
-            // If handlers aren't ready yet, wait a bit
-            await Task.Delay(500);
-            configsReady = false; // Return initializing status
         }
 
         var status = new
@@ -1570,63 +1515,34 @@ public class RevitApiServer : IDisposable
 
     private async Task HandleGetIfcConfigurations(HttpListenerResponse response)
     {
-        if (_uiApplication == null || _externalEventGetIfcConfigs == null || _eventHandlerGetIfcConfigs == null)
+        if (_uiApplication == null)
         {
             await SendError(response, 503, "Revit application not available");
             return;
         }
 
+        List<string> configs;
         try
         {
-            var tcs = new TaskCompletionSource<bool>();
-            _eventHandlerGetIfcConfigs.CompletionSource = tcs;
-            _eventHandlerGetIfcConfigs.Configurations.Clear(); // Clear before raising event
-            _externalEventGetIfcConfigs.Raise();
-
-            var completed = await Task.WhenAny(tcs.Task, Task.Delay(10000)); // Increased timeout to 10 seconds
-            
-            if (completed == tcs.Task && await tcs.Task)
-            {
-                // Always return configurations, even if empty (shouldn't happen due to defaults)
-                var configs = _eventHandlerGetIfcConfigs.Configurations;
-                if (configs.Count == 0)
-                {
-                    // Fallback: provide defaults if somehow empty
-                    configs.Add("Default");
-                    configs.Add("IFC2x3");
-                    configs.Add("IFC4");
-                }
-                
-                var result = new { configurations = configs };
-                var json = System.Text.Json.JsonSerializer.Serialize(result);
-                await SendJson(response, json);
-            }
-            else
-            {
-                // Timeout or failure - still return default configurations
-                System.Diagnostics.Debug.WriteLine("IFC configurations request timed out or failed, returning defaults");
-                var defaultConfigs = new List<string> { "Default", "IFC2x3", "IFC4" };
-                var result = new { configurations = defaultConfigs };
-                var json = System.Text.Json.JsonSerializer.Serialize(result);
-                await SendJson(response, json);
-            }
+            // Through the work queue: each request has its own job, so a status check reading the
+            // setups at the same time cannot take this request's answer
+            configs = await _writebackQueue.Run(GetIfcConfigurationsEventHandler.Read, ConfigsWait);
+            _configsRead = true;
+        }
+        catch (Writeback.RevitBusyException ex)
+        {
+            // No list kept from before: the setups are stored per model and the active model may
+            // have changed, which only the Revit thread could say
+            await SendError(response, 503, ex.Message);
+            return;
         }
         catch (Exception ex)
         {
-            System.Diagnostics.Debug.WriteLine($"Exception in HandleGetIfcConfigurations: {ex.Message}\n{ex.StackTrace}");
-            // Even on exception, return default configurations
-            try
-            {
-                var defaultConfigs = new List<string> { "Default", "IFC2x3", "IFC4" };
-                var result = new { configurations = defaultConfigs };
-                var json = System.Text.Json.JsonSerializer.Serialize(result);
-                await SendJson(response, json);
-            }
-            catch
-            {
-                await SendError(response, 500, $"Failed to get IFC configurations: {ex.Message}");
-            }
+            await SendError(response, 500, $"Could not read the IFC export setups: {ex.Message}");
+            return;
         }
+
+        await SendJson(response, System.Text.Json.JsonSerializer.Serialize(new { configurations = configs }));
     }
 
     private async Task HandleExportIfc(HttpListenerRequest request, HttpListenerResponse response)

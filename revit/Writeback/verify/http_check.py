@@ -332,15 +332,29 @@ try:
     log('configuration files with schema ->', status, body)
     check('setup files name the IFC version', (status, '"ifcVersion":"' in body), (200, True))
 
-    # /status: its config preload waits on an external event that cannot fire here, so it answers
-    # after its own retries; only the new field is of interest.
+    # IFC export setups go through the work queue: read when Revit runs the job, and a 503 naming
+    # the busy Revit (not a cut-off request) when it does not get to it
+    status, body = get('/ifc-configurations')
+    log('ifc-configurations ->', status, body)
+    check('setups read through the queue', (status, '"configurations":["' in body), (200, True))
+    started = time.time()
+    busy_task = client.GetAsync(BASE + '/ifc-configurations')
+    while not busy_task.IsCompleted and time.time() - started < 30:
+        time.sleep(0.1)
+    busy_status = int(busy_task.Result.StatusCode) if busy_task.IsCompleted else None
+    busy_body = busy_task.Result.Content.ReadAsStringAsync().Result if busy_task.IsCompleted else 'timed out'
+    log('ifc-configurations, queue not run, after %.0fs ->' % (time.time() - started), busy_status, busy_body)
+    check('setups while Revit is busy -> 503 before the page gives up', (busy_status, 'Revit is busy' in busy_body, time.time() - started < 15), (503, True, True))
+    queue.Execute(uiapp)  # the withdrawn job must not run or throw
+
+    # /status: the setups were read above, so it is ready without waiting on Revit
     started = time.time()
     status_task = client.GetAsync(BASE + '/status')
     done = pump(status_task, 60)
     status_body = status_task.Result.Content.ReadAsStringAsync().Result if done else 'timed out'
     log('status after %.0fs ->' % (time.time() - started), status_body)
     check('status reports its capabilities', '"capabilities":["writeback","export-overrides","pset-builder","element-inspector","model-memory"]' in status_body, True)
-    check('status keeps its other fields', ('"connected":true' in status_body, '"version":"1.4.0"' in status_body, '"configsReady":' in status_body), (True, True, True))
+    check('status keeps its other fields', ('"connected":true' in status_body, '"version":"1.4.0"' in status_body, '"configsReady":true' in status_body), (True, True, True))
 
     uiapp.Application.DocumentChanged -= on_changed
     server.Stop()

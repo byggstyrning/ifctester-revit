@@ -176,6 +176,20 @@ test.describe('property set file override for the Revit export', () => {
         await expect(page.locator('.override-label')).toHaveCount(0);
     });
 
+    test('a busy Revit is reported in words, not as an aborted request', async ({ page }) => {
+        const BUSY = 'Revit is busy. Finish the current command or close the open dialog in Revit, then try again.';
+        await mockRevit(page, ['writeback', 'export-overrides']);
+        // Registered last, so it answers first: the add-in's answer after its 8 s wait for Revit
+        await page.route(`${REVIT}/ifc-configurations`, async (route) => {
+            if (route.request().method() === 'OPTIONS') return route.fulfill({ status: 200, headers: CORS });
+            await new Promise((resolve) => setTimeout(resolve, 8_000));
+            await route.fulfill({ status: 503, headers: CORS, contentType: 'application/json', body: JSON.stringify({ error: BUSY }) });
+        });
+        await page.goto('/?source=revit');
+        await expect(page.getByText(`Failed to get IFC configurations: ${BUSY}`)).toBeVisible({ timeout: 20_000 });
+        await expect(page.getByText('signal is aborted')).toHaveCount(0);
+    });
+
     test('an add-in without the capability gets no override controls', async ({ page }) => {
         const revit = await mockRevit(page, ['writeback']);
         await page.goto('/?source=revit');

@@ -373,27 +373,10 @@ export const getIfcConfigurations = async () => {
     }
     
     try {
-        const configUrl = `${Revit.apiUrl}/ifc-configurations`;
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 10000);
-        
-        const response = await fetch(configUrl, {
-            method: 'GET',
-            mode: 'cors',
-            headers: {
-                'Content-Type': 'application/json'
-            },
-            signal: controller.signal
-        });
-        
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-            throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-        }
-        
-        const data = await response.json();
-        return data.configurations || [];
+        // Longer than the add-in waits for Revit (8 s), so a busy Revit is reported by the add-in
+        // instead of the request being cut off
+        const data = await getJson('/ifc-configurations', 15000);
+        return data?.configurations || [];
     } catch (err) {
         console.error('Failed to get IFC configurations:', err);
         error(`Failed to get IFC configurations: ${err.message}`);
